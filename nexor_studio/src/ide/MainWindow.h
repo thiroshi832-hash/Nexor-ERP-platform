@@ -28,6 +28,8 @@ class ProjectTree;
 class Project;
 class QPlainTextEdit;
 class QDockWidget;
+class QWidget;
+class QAction;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -58,11 +60,12 @@ private:
     void rememberRecent(const QString &path);
     QStringList loadRecentProjects() const;
 
-    SideBar      *m_sideBar;
-    CentralStack *m_central;
-    ProjectTree  *m_projectTree;
-    QDockWidget  *m_projectDock;
-    QDockWidget  *m_outputDock;
+    SideBar        *m_sideBar;
+    CentralStack   *m_central;
+    ProjectTree    *m_projectTree;
+    QWidget        *m_projectPanel;     // wraps tree + header
+    QAction        *m_toggleProjectPanelAction;
+    QDockWidget    *m_outputDock;
     QPlainTextEdit *m_output;
 
     std::unique_ptr<Project> m_project;

@@ -14,6 +14,10 @@
 #include <QDockWidget>
 #include <QPlainTextEdit>
 #include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QSplitter>
+#include <QLabel>
+#include <QAction>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QSettings>
@@ -26,7 +30,8 @@ MainWindow::MainWindow(QWidget *parent)
     , m_sideBar(nullptr)
     , m_central(nullptr)
     , m_projectTree(nullptr)
-    , m_projectDock(nullptr)
+    , m_projectPanel(nullptr)
+    , m_toggleProjectPanelAction(nullptr)
     , m_outputDock(nullptr)
     , m_output(nullptr) {
 
@@ -65,25 +70,50 @@ void MainWindow::setupUi() {
                               font-size:12px; border:none; }
     )");
 
+    // Layout (Qt Creator-style):
+    //   [ SideBar | [ ProjectPanel │ CentralStack ] ]   ← horizontal QSplitter
+    //   The bottom-area Output remains a QDockWidget so it can be hidden/popped.
+
     auto *shell = new QWidget(this);
     auto *row   = new QHBoxLayout(shell);
     row->setContentsMargins(0, 0, 0, 0);
     row->setSpacing(0);
 
     m_sideBar = new SideBar(shell);
-    m_central = new CentralStack(shell);
-    row->addWidget(m_sideBar);
-    row->addWidget(m_central, 1);
-    setCentralWidget(shell);
 
-    // Project tree dock (left)
-    m_projectTree = new ProjectTree;
-    m_projectDock = new QDockWidget("PROJECT", this);
-    m_projectDock->setWidget(m_projectTree);
-    m_projectDock->setFeatures(QDockWidget::DockWidgetMovable |
-                               QDockWidget::DockWidgetFloatable);
-    m_projectDock->setMinimumWidth(260);
-    addDockWidget(Qt::LeftDockWidgetArea, m_projectDock);
+    auto *splitter = new QSplitter(Qt::Horizontal, shell);
+    splitter->setHandleWidth(1);
+    splitter->setChildrenCollapsible(false);
+    splitter->setStyleSheet("QSplitter::handle{ background:#1e2030; }");
+
+    // ── Project panel (header + tree) ───────────────────────────────────
+    m_projectPanel = new QWidget(splitter);
+    m_projectPanel->setStyleSheet("background:#13151b;");
+    auto *panelCol = new QVBoxLayout(m_projectPanel);
+    panelCol->setContentsMargins(0, 0, 0, 0);
+    panelCol->setSpacing(0);
+
+    auto *panelHeader = new QLabel("PROJECT", m_projectPanel);
+    panelHeader->setStyleSheet(
+        "QLabel { background:#0d0e12; color:#8a95a3;"
+        " padding:8px 12px; border-bottom:1px solid #1e2030;"
+        " font-size:11px; font-weight:600; letter-spacing:2px; }");
+    panelCol->addWidget(panelHeader);
+
+    m_projectTree = new ProjectTree(m_projectPanel);
+    panelCol->addWidget(m_projectTree, 1);
+
+    m_central = new CentralStack(splitter);
+
+    splitter->addWidget(m_projectPanel);
+    splitter->addWidget(m_central);
+    splitter->setStretchFactor(0, 0);
+    splitter->setStretchFactor(1, 1);
+    splitter->setSizes({280, 1000});
+
+    row->addWidget(m_sideBar);
+    row->addWidget(splitter, 1);
+    setCentralWidget(shell);
 
     // Output dock (bottom)
     m_output = new QPlainTextEdit;
@@ -127,7 +157,14 @@ void MainWindow::buildMenus() {
     editMenu->addAction("Redo")->setEnabled(false);
 
     auto *viewMenu = menuBar()->addMenu("&View");
-    viewMenu->addAction(m_projectDock->toggleViewAction());
+    m_toggleProjectPanelAction = new QAction("Project Panel", this);
+    m_toggleProjectPanelAction->setCheckable(true);
+    m_toggleProjectPanelAction->setChecked(true);
+    m_toggleProjectPanelAction->setShortcut(QKeySequence("Alt+0"));
+    connect(m_toggleProjectPanelAction, &QAction::toggled, this, [this](bool on){
+        if (m_projectPanel) m_projectPanel->setVisible(on);
+    });
+    viewMenu->addAction(m_toggleProjectPanelAction);
     viewMenu->addAction(m_outputDock->toggleViewAction());
 
     auto *buildMenu = menuBar()->addMenu("&Build");
