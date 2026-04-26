@@ -2,6 +2,7 @@
 
 #include "welcome/WelcomePage.h"
 #include "editor/CodeEditor.h"
+#include "designer/DesignerView.h"
 #include "designer/FormDesigner.h"
 
 #include <QLabel>
@@ -28,17 +29,21 @@ QWidget *placeholder(const QString &title, const QString &subtitle) {
 }
 
 CentralStack::CentralStack(QWidget *parent) : QStackedWidget(parent) {
-    m_welcome  = new WelcomePage;
-    m_editor   = new CodeEditor;
-    m_designer = new FormDesigner;
+    m_welcome      = new WelcomePage;
+    m_editor       = new CodeEditor;
+    m_designerView = new DesignerView;
 
-    addWidget(m_welcome);   // PageWelcome
-    addWidget(m_editor);    // PageEditor
-    addWidget(m_designer);  // PageDesigner
+    addWidget(m_welcome);        // PageWelcome
+    addWidget(m_editor);         // PageEditor
+    addWidget(m_designerView);   // PageDesigner
     addWidget(placeholder("BUILD",
         "Compilation output will appear here.\n"
         "Compiler lands in feature/language-compiler."));
     addWidget(placeholder("DEBUG",
         "Breakpoint, step and watch panels will live here.\n"
         "Debugger lands in feature/debugger."));
+}
+
+FormDesigner *CentralStack::formDesigner() const {
+    return m_designerView ? m_designerView->formDesigner() : nullptr;
 }

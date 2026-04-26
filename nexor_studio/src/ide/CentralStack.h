@@ -2,11 +2,11 @@
 // CentralStack — QStackedWidget for the main content area.
 //
 // Pages:
-//   PageWelcome  — WelcomePage (Qt-Creator-style start page)
-//   PageEditor   — CodeEditor (.aba code, syntax-highlighted, line numbers)
-//   PageDesigner — FormDesigner (.frm canvas)
-//   PageBuild    — placeholder for build configuration
-//   PageDebug    — placeholder for debug pane
+//   PageWelcome  — WelcomePage
+//   PageEditor   — CodeEditor
+//   PageDesigner — DesignerView (WidgetPalette + FormDesigner)
+//   PageBuild    — placeholder
+//   PageDebug    — placeholder
 // =============================================================================
 #ifndef NEXOR_STUDIO_CENTRALSTACK_H
 #define NEXOR_STUDIO_CENTRALSTACK_H
@@ -16,6 +16,7 @@
 class WelcomePage;
 class CodeEditor;
 class FormDesigner;
+class DesignerView;
 
 class CentralStack : public QStackedWidget {
     Q_OBJECT
@@ -26,14 +27,15 @@ public:
 
     WelcomePage  *welcomePage()  const { return m_welcome; }
     CodeEditor   *codeEditor()   const { return m_editor; }
-    FormDesigner *formDesigner() const { return m_designer; }
+    DesignerView *designerView() const { return m_designerView; }
+    FormDesigner *formDesigner() const;   // shortcut: m_designerView->formDesigner()
 
     void showPage(Page p) { setCurrentIndex(p); }
 
 private:
-    WelcomePage  *m_welcome  { nullptr };
-    CodeEditor   *m_editor   { nullptr };
-    FormDesigner *m_designer { nullptr };
+    WelcomePage  *m_welcome      { nullptr };
+    CodeEditor   *m_editor       { nullptr };
+    DesignerView *m_designerView { nullptr };
 };
 
 #endif // NEXOR_STUDIO_CENTRALSTACK_H
