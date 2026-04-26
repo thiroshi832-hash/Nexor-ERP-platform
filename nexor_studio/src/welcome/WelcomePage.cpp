@@ -1,302 +1,519 @@
 #include "WelcomePage.h"
 
 #include <QLabel>
-#include <QListWidget>
 #include <QStackedWidget>
 #include <QToolButton>
 #include <QButtonGroup>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
+#include <QScrollArea>
 #include <QFileInfo>
-#include <QFrame>
+#include <QPainter>
+#include <QPainterPath>
+#include <QMouseEvent>
+#include <QAbstractButton>
+#include <QFontMetrics>
 
 namespace {
 
-QListWidget *makeCardList(QWidget *parent) {
-    auto *list = new QListWidget(parent);
-    list->setFrameShape(QFrame::NoFrame);
-    list->setSpacing(6);
-    list->setSelectionMode(QAbstractItemView::SingleSelection);
-    list->setStyleSheet(R"(
-        QListWidget {
-            background:#13151b; color:#dce1e7; border:none;
-            font-size:13px; padding:4px 4px 4px 0;
+// =============================================================================
+// WelcomeRow — one numbered list item (Sessions or Projects).
+//
+//   1   ▶   default
+//             (last session)
+//
+// Inherits QAbstractButton so we get clicked() and hover/press states for free.
+// =============================================================================
+class WelcomeRow : public QAbstractButton {
+public:
+    enum Icon { IconPlay, IconFolder };
+
+    WelcomeRow(int number, Icon icon, const QString &title,
+               const QString &subtitle, QWidget *parent = nullptr)
+        : QAbstractButton(parent)
+        , m_number(number)
+        , m_icon(icon)
+        , m_title(title)
+        , m_subtitle(subtitle) {
+        setCursor(Qt::PointingHandCursor);
+        setFixedHeight(subtitle.isEmpty() ? 28 : 44);
+        setAttribute(Qt::WA_Hover, true);
+    }
+
+    QSize sizeHint() const override {
+        return QSize(320, height());
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+
+        // Hover background
+        if (underMouse()) {
+            p.fillRect(rect(), QColor(0xff, 0xff, 0xff, 18));
         }
-        QListWidget::item {
-            background:#1b1d23; border:1px solid #262932;
-            border-radius:6px; padding:14px 16px; margin:0;
+
+        // Number column (left)
+        QRect numRect(8, 0, 22, height());
+        p.setPen(QColor(0x9a, 0x9a, 0x9a));
+        QFont nf = p.font();
+        nf.setPointSize(9);
+        p.setFont(nf);
+        p.drawText(numRect, Qt::AlignTop | Qt::AlignRight,
+                   QString::number(m_number));
+
+        // Icon column
+        QRect iconRect(36, 4, 18, 18);
+        drawIcon(p, iconRect, QColor(0xb0, 0xb0, 0xb0));
+
+        // Title (green)
+        QRect titleRect(60, 2, width() - 64, 20);
+        QFont tf = p.font();
+        tf.setPointSize(10);
+        p.setFont(tf);
+        p.setPen(underMouse() ? QColor(0x6a, 0xe0, 0x7a)
+                              : QColor(0x41, 0xcd, 0x52));
+        p.drawText(titleRect, Qt::AlignLeft | Qt::AlignVCenter, m_title);
+
+        // Subtitle (gray, smaller)
+        if (!m_subtitle.isEmpty()) {
+            QRect subRect(60, 22, width() - 64, 18);
+            QFont sf = p.font();
+            sf.setPointSize(8);
+            p.setFont(sf);
+            p.setPen(QColor(0x8a, 0x8a, 0x8a));
+            QFontMetrics fm(sf);
+            QString elided = fm.elidedText(m_subtitle, Qt::ElideMiddle,
+                                           subRect.width());
+            p.drawText(subRect, Qt::AlignLeft | Qt::AlignVCenter, elided);
         }
-        QListWidget::item:hover    { border-color:#5b8cff; background:#1f2230; }
-        QListWidget::item:selected { background:#1e3a5f; border-color:#5b8cff;
-                                     color:#ffffff; }
-    )");
-    return list;
+    }
+
+    void enterEvent(QEvent *) override { update(); }
+    void leaveEvent(QEvent *) override { update(); }
+
+private:
+    void drawIcon(QPainter &p, const QRect &r, const QColor &c) {
+        QPen pen(c, 1.4);
+        pen.setCapStyle(Qt::RoundCap);
+        pen.setJoinStyle(Qt::RoundJoin);
+        p.setPen(pen);
+        p.setBrush(Qt::NoBrush);
+
+        if (m_icon == IconPlay) {
+            QPainterPath tri;
+            tri.moveTo(r.left()  + 4, r.top()    + 2);
+            tri.lineTo(r.right() - 3, r.center().y());
+            tri.lineTo(r.left()  + 4, r.bottom() - 2);
+            tri.closeSubpath();
+            p.fillPath(tri, c);
+        } else { // IconFolder
+            QPainterPath f;
+            f.moveTo(r.left(),     r.top() + 5);
+            f.lineTo(r.left() + 6, r.top() + 5);
+            f.lineTo(r.left() + 8, r.top() + 7);
+            f.lineTo(r.right(),    r.top() + 7);
+            f.lineTo(r.right(),    r.bottom() - 1);
+            f.lineTo(r.left(),     r.bottom() - 1);
+            f.closeSubpath();
+            p.drawPath(f);
+        }
+    }
+
+    int     m_number;
+    Icon    m_icon;
+    QString m_title;
+    QString m_subtitle;
+};
+
+// =============================================================================
+// Helpers for action buttons (Manage / + New / ▥ Open) and small bottom links.
+// =============================================================================
+QToolButton *makeActionBtn(const QString &iconText, const QString &label,
+                           QWidget *parent) {
+    auto *b = new QToolButton(parent);
+    b->setObjectName("actionBtn");
+    b->setText(QString("  %1   %2  ").arg(iconText, label));
+    b->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    b->setCursor(Qt::PointingHandCursor);
+    b->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    return b;
+}
+
+QToolButton *makeFooterLink(const QString &iconText, const QString &label,
+                            QWidget *parent) {
+    auto *b = new QToolButton(parent);
+    b->setObjectName("footerLink");
+    b->setText(QString("%1   %2").arg(iconText, label));
+    b->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    b->setCursor(Qt::PointingHandCursor);
+    b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    return b;
+}
+
+QFrame *vline() {
+    auto *f = new QFrame;
+    f->setFrameShape(QFrame::VLine);
+    f->setStyleSheet("color:#1e2030;");
+    return f;
 }
 
 } // namespace
 
+
+// =============================================================================
+// WelcomePage
+// =============================================================================
 WelcomePage::WelcomePage(QWidget *parent)
     : QWidget(parent)
     , m_newBtn(nullptr), m_openBtn(nullptr)
-    , m_tabGroup(nullptr)
+    , m_manageSessionsBtn(nullptr), m_getStartedBtn(nullptr)
+    , m_subTabGroup(nullptr)
     , m_tabProjects(nullptr), m_tabExamples(nullptr), m_tabTutorials(nullptr)
     , m_contentStack(nullptr)
-    , m_recentList(nullptr), m_exampleList(nullptr), m_tutorialList(nullptr)
+    , m_recentRowsLayout(nullptr)
 {
     setObjectName("welcomePage");
     setStyleSheet(R"(
-        QWidget#welcomePage  { background:#13151b; }
-        QWidget#sideBar      { background:#0f1116; border-right:1px solid #1e2030; }
-        QWidget#footer       { background:#0d0e12; border-top:1px solid #1e2030; }
-        QLabel#brand         { color:#5b8cff; font-size:24px; font-weight:300;
-                               letter-spacing:5px; }
-        QLabel#tagline       { color:#6b7280; font-size:11px; letter-spacing:2px; }
-        QLabel#sectionTitle  { color:#dce1e7; font-size:22px; font-weight:300;
-                               letter-spacing:1px; }
-        QLabel#sectionLabel  { color:#6b7280; font-size:10px; font-weight:600;
-                               letter-spacing:2px; }
-        QToolButton#bigBtn {
-            background:#1e3a5f; color:#dce1e7;
-            border:1px solid #2a4a72; border-radius:6px;
-            padding:10px 14px; font-size:13px; font-weight:600;
+        QWidget#welcomePage    { background:#4d4d4d; }
+        QWidget#welcomeSidebar { background:#3c3c3c; }
+        QWidget#welcomeContent { background:#4d4d4d; }
+        QWidget#welcomeFooter  { background:#3c3c3c; border-top:1px solid #2a2a2a; }
+
+        QLabel#sectionTitle    { color:#dcdcdc; font-size:18px; font-weight:400; }
+        QLabel#promoTitle      { color:#dcdcdc; font-size:14px; font-weight:600; }
+        QLabel#promoBody       { color:#a8a8a8; font-size:11px; }
+        QLabel#columnHeader    { color:#dcdcdc; font-size:13px; font-weight:600; }
+
+        /* Big Projects/Examples/Tutorials tab buttons */
+        QToolButton#subTab {
+            background:#4d4d4d; color:#dcdcdc; border:none;
+            padding:11px 18px; font-size:13px; font-weight:500;
             text-align:left;
         }
-        QToolButton#bigBtn:hover    { background:#26477a; border-color:#5b8cff; }
-        QToolButton#bigBtn:pressed  { background:#1a3252; }
-        QToolButton#tabBtn {
-            background:transparent; color:#8a95a3;
-            border:none; padding:9px 18px; text-align:left;
-            font-size:13px; font-weight:600; letter-spacing:1px;
+        QToolButton#subTab:hover    { background:#555; }
+        QToolButton#subTab:checked  { background:#1c1c1c; color:#ffffff; }
+
+        /* Get Started Now button */
+        QToolButton#getStartedBtn {
+            background:#5a5a5a; color:#dcdcdc;
+            border:1px solid #6a6a6a; border-radius:0;
+            padding:8px 14px; font-size:12px;
         }
-        QToolButton#tabBtn:hover    { color:#dce1e7; background:#181a22; }
-        QToolButton#tabBtn:checked  { color:#5b8cff; background:#181a22;
-                                      border-left:3px solid #5b8cff;
-                                      padding-left:15px; }
+        QToolButton#getStartedBtn:hover  { background:#6a6a6a; }
+
+        /* Manage / + New / Open header buttons */
+        QToolButton#actionBtn {
+            background:#5a5a5a; color:#dcdcdc;
+            border:1px solid #6a6a6a; border-radius:0;
+            padding:6px 14px; font-size:12px;
+        }
+        QToolButton#actionBtn:hover  { background:#6a6a6a; }
+
+        /* Bottom-left link buttons (Account / Community / etc.) */
         QToolButton#footerLink {
-            background:transparent; color:#8a95a3; border:none;
-            padding:8px 14px; font-size:12px; font-weight:500;
+            background:transparent; color:#cccccc;
+            border:none; padding:6px 0; font-size:12px;
+            text-align:left;
         }
-        QToolButton#footerLink:hover { color:#5b8cff; }
+        QToolButton#footerLink:hover { color:#ffffff; }
+
+        QScrollArea, QScrollArea > QWidget > QWidget {
+            background:transparent; border:none;
+        }
     )");
 
-    // Outer layout: vertical = [content row | footer]
-    auto *outer = new QVBoxLayout(this);
-    outer->setContentsMargins(0, 0, 0, 0);
-    outer->setSpacing(0);
+    // Outer = horizontal: [side bar | content area]
+    auto *root = new QHBoxLayout(this);
+    root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(0);
 
-    // Content row: [side bar | content stack]
-    auto *contentRow = new QHBoxLayout;
-    contentRow->setContentsMargins(0, 0, 0, 0);
-    contentRow->setSpacing(0);
-
-    contentRow->addWidget(buildSideBar(), 0);
+    root->addWidget(buildSideBar(), 0);
 
     m_contentStack = new QStackedWidget;
+    m_contentStack->setObjectName("welcomeContent");
     m_contentStack->addWidget(buildProjectsView());   // 0
     m_contentStack->addWidget(buildExamplesView());   // 1
     m_contentStack->addWidget(buildTutorialsView());  // 2
-    contentRow->addWidget(m_contentStack, 1);
+    root->addWidget(m_contentStack, 1);
 
-    outer->addLayout(contentRow, 1);
-
-    outer->addWidget(buildFooter(), 0);
-
-    // Default sub-tab: Projects
     m_tabProjects->setChecked(true);
     onSubTabClicked(TabProjects);
 }
 
+// ─── Side bar ─────────────────────────────────────────────────────────────
 QWidget *WelcomePage::buildSideBar() {
     auto *side = new QWidget;
-    side->setObjectName("sideBar");
-    side->setFixedWidth(240);
+    side->setObjectName("welcomeSidebar");
+    side->setFixedWidth(250);
 
     auto *col = new QVBoxLayout(side);
-    col->setContentsMargins(20, 28, 20, 20);
-    col->setSpacing(14);
+    col->setContentsMargins(0, 18, 0, 18);
+    col->setSpacing(2);
 
-    // Brand
-    auto *brand   = new QLabel("NEXOR");           brand->setObjectName("brand");
-    auto *tagline = new QLabel("STUDIO  ·  0.1");  tagline->setObjectName("tagline");
-    col->addWidget(brand);
-    col->addWidget(tagline);
-
-    col->addSpacing(20);
-
-    // Action buttons
-    m_newBtn = new QToolButton;
-    m_newBtn->setObjectName("bigBtn");
-    m_newBtn->setText("  +    New Project");
-    m_newBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    m_newBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-
-    m_openBtn = new QToolButton;
-    m_openBtn->setObjectName("bigBtn");
-    m_openBtn->setText("  ⇪    Open Project...");
-    m_openBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    m_openBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-
-    col->addWidget(m_newBtn);
-    col->addWidget(m_openBtn);
-
-    col->addSpacing(28);
-
-    // Sub-tab selectors
-    auto *navLbl = new QLabel("BROWSE"); navLbl->setObjectName("sectionLabel");
-    col->addWidget(navLbl);
-
-    m_tabGroup = new QButtonGroup(this);
-    m_tabGroup->setExclusive(true);
+    // ── Big sub-tab buttons ─────────────────────────────────
+    m_subTabGroup = new QButtonGroup(this);
+    m_subTabGroup->setExclusive(true);
 
     auto makeTab = [&](const QString &text, int id) -> QToolButton* {
         auto *b = new QToolButton;
-        b->setObjectName("tabBtn");
-        b->setText(text);
+        b->setObjectName("subTab");
+        b->setText("    " + text);
         b->setCheckable(true);
         b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        m_tabGroup->addButton(b, id);
+        b->setMinimumHeight(40);
+        m_subTabGroup->addButton(b, id);
+        col->addWidget(b);
         return b;
     };
-
     m_tabProjects  = makeTab("Projects",  TabProjects);
     m_tabExamples  = makeTab("Examples",  TabExamples);
     m_tabTutorials = makeTab("Tutorials", TabTutorials);
 
-    // Use a tight container so the stripe-on-checked aligns to the side bar
-    auto *tabsBox = new QVBoxLayout;
-    tabsBox->setContentsMargins(-20, 0, -20, 0); // bleed to side-bar edges
-    tabsBox->setSpacing(2);
-    tabsBox->addWidget(m_tabProjects);
-    tabsBox->addWidget(m_tabExamples);
-    tabsBox->addWidget(m_tabTutorials);
-    col->addLayout(tabsBox);
+    col->addSpacing(28);
+
+    // ── "New to Nexor?" promo block ─────────────────────────
+    auto *promoTitle = new QLabel("New to Nexor?");
+    promoTitle->setObjectName("promoTitle");
+    auto *promoBody = new QLabel(
+        "Learn how to build atomic activities, "
+        "design forms, and run them on the Nexor runtime.");
+    promoBody->setObjectName("promoBody");
+    promoBody->setWordWrap(true);
+
+    auto *promoCol = new QVBoxLayout;
+    promoCol->setContentsMargins(20, 0, 20, 0);
+    promoCol->setSpacing(8);
+    promoCol->addWidget(promoTitle);
+    promoCol->addWidget(promoBody);
+
+    m_getStartedBtn = new QToolButton;
+    m_getStartedBtn->setObjectName("getStartedBtn");
+    m_getStartedBtn->setText("Get Started Now");
+    m_getStartedBtn->setCursor(Qt::PointingHandCursor);
+    m_getStartedBtn->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    auto *getRow = new QHBoxLayout;
+    getRow->setContentsMargins(0, 6, 0, 0);
+    getRow->addWidget(m_getStartedBtn);
+    getRow->addStretch();
+    promoCol->addLayout(getRow);
+
+    col->addLayout(promoCol);
 
     col->addStretch();
 
-    connect(m_newBtn,  &QToolButton::clicked, this, &WelcomePage::newProjectRequested);
-    connect(m_openBtn, &QToolButton::clicked, this, &WelcomePage::openProjectRequested);
-    connect(m_tabGroup, QOverload<int>::of(&QButtonGroup::buttonClicked),
+    // ── Bottom links (Account / Community / Blogs / User Guide) ─
+    auto *linksCol = new QVBoxLayout;
+    linksCol->setContentsMargins(20, 0, 20, 0);
+    linksCol->setSpacing(2);
+
+    linksCol->addWidget(makeFooterLink("◯", "Account",          this));
+    linksCol->addWidget(makeFooterLink("▭", "Online Community", this));
+    linksCol->addWidget(makeFooterLink("≡", "Blogs",            this));
+    linksCol->addWidget(makeFooterLink("?", "User Guide",       this));
+
+    col->addLayout(linksCol);
+
+    connect(m_subTabGroup, QOverload<int>::of(&QButtonGroup::buttonClicked),
             this, &WelcomePage::onSubTabClicked);
+    connect(m_getStartedBtn, &QToolButton::clicked,
+            this, &WelcomePage::getStartedRequested);
 
     return side;
 }
 
+// ─── Main content view: Projects (Sessions + Projects two columns) ───────
 QWidget *WelcomePage::buildProjectsView() {
     auto *page = new QWidget;
-    auto *col = new QVBoxLayout(page);
-    col->setContentsMargins(40, 36, 40, 24);
-    col->setSpacing(16);
+    page->setStyleSheet("background:#4d4d4d;");
 
-    auto *title = new QLabel("Recent Projects"); title->setObjectName("sectionTitle");
-    col->addWidget(title);
+    auto *root = new QHBoxLayout(page);
+    root->setContentsMargins(40, 28, 40, 28);
+    root->setSpacing(40);
 
-    m_recentList = makeCardList(page);
-    col->addWidget(m_recentList, 1);
+    // ────────── Sessions column ──────────
+    auto *sessionsCol = new QVBoxLayout;
+    sessionsCol->setSpacing(12);
 
-    connect(m_recentList, &QListWidget::itemActivated, this, [this](QListWidgetItem *it){
-        if (it && (it->flags() & Qt::ItemIsSelectable))
-            emit recentProjectActivated(it->data(Qt::UserRole).toString());
-    });
+    auto *sessionsHeader = new QHBoxLayout;
+    auto *sessionsTitle = new QLabel("Sessions");
+    sessionsTitle->setObjectName("sectionTitle");
+    sessionsHeader->addWidget(sessionsTitle);
+    sessionsHeader->addSpacing(14);
+    m_manageSessionsBtn = makeActionBtn("⚙", "Manage", page);
+    sessionsHeader->addWidget(m_manageSessionsBtn);
+    sessionsHeader->addStretch();
+    sessionsCol->addLayout(sessionsHeader);
+
+    auto *sessionsRows = new QVBoxLayout;
+    sessionsRows->setSpacing(0);
+    sessionsRows->setContentsMargins(0, 6, 0, 0);
+    rebuildSessionList(sessionsRows);
+    sessionsCol->addLayout(sessionsRows);
+    sessionsCol->addStretch();
+
+    auto *sessionsWrap = new QWidget;
+    sessionsWrap->setLayout(sessionsCol);
+    sessionsWrap->setMinimumWidth(280);
+    sessionsWrap->setMaximumWidth(320);
+    root->addWidget(sessionsWrap, 0);
+
+    // ────────── Projects column ──────────
+    auto *projectsCol = new QVBoxLayout;
+    projectsCol->setSpacing(12);
+
+    auto *projectsHeader = new QHBoxLayout;
+    auto *projectsTitle = new QLabel("Projects");
+    projectsTitle->setObjectName("sectionTitle");
+    projectsHeader->addWidget(projectsTitle);
+    projectsHeader->addSpacing(14);
+    m_newBtn  = makeActionBtn("+", "New",  page);
+    m_openBtn = makeActionBtn("▥", "Open", page);
+    projectsHeader->addWidget(m_newBtn);
+    projectsHeader->addWidget(m_openBtn);
+    projectsHeader->addStretch();
+    projectsCol->addLayout(projectsHeader);
+
+    auto *scroll = new QScrollArea;
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto *scrollBody = new QWidget;
+    m_recentRowsLayout = new QVBoxLayout(scrollBody);
+    m_recentRowsLayout->setContentsMargins(0, 6, 0, 0);
+    m_recentRowsLayout->setSpacing(0);
+    m_recentRowsLayout->addStretch();   // pushes rows to top
+    scroll->setWidget(scrollBody);
+    projectsCol->addWidget(scroll, 1);
+
+    rebuildRecentProjects();
+
+    root->addLayout(projectsCol, 1);
+
+    connect(m_newBtn,  &QToolButton::clicked, this, &WelcomePage::newProjectRequested);
+    connect(m_openBtn, &QToolButton::clicked, this, &WelcomePage::openProjectRequested);
+
     return page;
 }
 
 QWidget *WelcomePage::buildExamplesView() {
     auto *page = new QWidget;
+    page->setStyleSheet("background:#4d4d4d;");
     auto *col = new QVBoxLayout(page);
-    col->setContentsMargins(40, 36, 40, 24);
-    col->setSpacing(16);
+    col->setContentsMargins(40, 28, 40, 28);
+    col->setSpacing(12);
 
-    auto *title = new QLabel("Examples"); title->setObjectName("sectionTitle");
-    col->addWidget(title);
+    auto *t = new QLabel("Examples"); t->setObjectName("sectionTitle");
+    col->addWidget(t);
 
-    m_exampleList = makeCardList(page);
-    auto add = [this](const QString &title, const QString &subtitle) {
-        auto *it = new QListWidgetItem(QString("%1\n   %2").arg(title, subtitle));
-        it->setData(Qt::UserRole, title);
-        m_exampleList->addItem(it);
-    };
-    add("Hello World",       "Single-form atomic activity that prints to console");
-    add("Calculator",        "Two-input form with code-behind doing arithmetic");
-    add("Account Book",      "Multi-form activity with shared global variables");
-    add("Web Service Client","Demonstrates Resources and HTTP calls");
-    col->addWidget(m_exampleList, 1);
-
-    connect(m_exampleList, &QListWidget::itemActivated, this, [this](QListWidgetItem *it){
-        if (it) emit exampleActivated(it->data(Qt::UserRole).toString());
-    });
+    auto *rows = new QVBoxLayout;
+    rows->setContentsMargins(0, 6, 0, 0);
+    rows->setSpacing(0);
+    rebuildExampleList(rows);
+    col->addLayout(rows);
+    col->addStretch();
     return page;
 }
 
 QWidget *WelcomePage::buildTutorialsView() {
     auto *page = new QWidget;
+    page->setStyleSheet("background:#4d4d4d;");
     auto *col = new QVBoxLayout(page);
-    col->setContentsMargins(40, 36, 40, 24);
-    col->setSpacing(16);
+    col->setContentsMargins(40, 28, 40, 28);
+    col->setSpacing(12);
 
-    auto *title = new QLabel("Tutorials"); title->setObjectName("sectionTitle");
-    col->addWidget(title);
+    auto *t = new QLabel("Tutorials"); t->setObjectName("sectionTitle");
+    col->addWidget(t);
 
-    m_tutorialList = makeCardList(page);
-    auto add = [this](const QString &t, const QString &s) {
-        auto *it = new QListWidgetItem(QString("%1\n   %2").arg(t, s));
-        m_tutorialList->addItem(it);
-    };
-    add("Your First Activity",   "Create a new project and run an activity");
-    add("Designing Forms",       "Drag-and-drop UI in the form designer");
-    add("The Nexor Language",    "Subs, variables, and global state");
-    add("Connecting to Core",    "Talk to the Nexor backend from Flux");
-    col->addWidget(m_tutorialList, 1);
-
+    auto *rows = new QVBoxLayout;
+    rows->setContentsMargins(0, 6, 0, 0);
+    rows->setSpacing(0);
+    rebuildTutorialList(rows);
+    col->addLayout(rows);
+    col->addStretch();
     return page;
 }
 
-QWidget *WelcomePage::buildFooter() {
-    auto *footer = new QWidget;
-    footer->setObjectName("footer");
-    footer->setFixedHeight(40);
-    auto *row = new QHBoxLayout(footer);
-    row->setContentsMargins(20, 0, 20, 0);
-    row->setSpacing(2);
-
-    auto add = [&](const QString &label){
-        auto *b = new QToolButton;
-        b->setObjectName("footerLink");
-        b->setText(label);
-        b->setCursor(Qt::PointingHandCursor);
-        row->addWidget(b);
-    };
-    add("Documentation");
-    add("·");
-    add("Examples");
-    add("·");
-    add("GitHub");
-    row->addStretch();
-    auto *ver = new QLabel("Nexor Studio 0.1.0");
-    ver->setStyleSheet("color:#4a5060; font-size:11px;");
-    row->addWidget(ver);
-    return footer;
+// ─── Row builders ─────────────────────────────────────────────────────────
+void WelcomePage::rebuildSessionList(QVBoxLayout *into) {
+    auto *row = new WelcomeRow(1, WelcomeRow::IconPlay,
+                               "default", "(last session)", into->parentWidget());
+    into->addWidget(row);
 }
 
+void WelcomePage::rebuildRecentProjects() {
+    if (!m_recentRowsLayout) return;
+
+    // Clear all but the trailing stretch
+    while (m_recentRowsLayout->count() > 1) {
+        QLayoutItem *it = m_recentRowsLayout->takeAt(0);
+        if (it->widget()) it->widget()->deleteLater();
+        delete it;
+    }
+
+    if (m_recentPaths.isEmpty()) {
+        auto *empty = new QLabel(
+            "No recent projects.  Click  + New  to create one.");
+        empty->setStyleSheet("color:#8a8a8a; font-size:12px; padding:8px 0;");
+        m_recentRowsLayout->insertWidget(m_recentRowsLayout->count() - 1, empty);
+        return;
+    }
+
+    int n = 1;
+    for (const QString &path : m_recentPaths) {
+        QFileInfo fi(path);
+        auto *row = new WelcomeRow(n++, WelcomeRow::IconFolder,
+                                   fi.completeBaseName(),
+                                   fi.absoluteFilePath());
+        connect(row, &QAbstractButton::clicked, this, [this, path]{
+            emit recentProjectActivated(path);
+        });
+        m_recentRowsLayout->insertWidget(m_recentRowsLayout->count() - 1, row);
+    }
+}
+
+void WelcomePage::rebuildExampleList(QVBoxLayout *into) {
+    struct Ex { QString title; QString subtitle; };
+    QVector<Ex> items = {
+        {"Hello World",        "Single-form atomic activity that prints to console"},
+        {"Calculator",         "Two-input form with code-behind doing arithmetic"},
+        {"Account Book",       "Multi-form activity with shared global variables"},
+        {"Web Service Client", "Demonstrates Resources and HTTP calls"},
+    };
+    int n = 1;
+    for (const Ex &e : items) {
+        auto *row = new WelcomeRow(n++, WelcomeRow::IconFolder,
+                                   e.title, e.subtitle, into->parentWidget());
+        QString name = e.title;
+        connect(row, &QAbstractButton::clicked, this, [this, name]{
+            emit exampleActivated(name);
+        });
+        into->addWidget(row);
+    }
+}
+
+void WelcomePage::rebuildTutorialList(QVBoxLayout *into) {
+    struct T { QString title; QString subtitle; };
+    QVector<T> items = {
+        {"Your First Activity", "Create a project and run an activity"},
+        {"Designing Forms",     "Drag-and-drop UI in the form designer"},
+        {"The Nexor Language",  "Subs, variables, and global state"},
+        {"Connecting to Core",  "Talk to the Nexor backend from Flux"},
+    };
+    int n = 1;
+    for (const T &t : items) {
+        auto *row = new WelcomeRow(n++, WelcomeRow::IconFolder,
+                                   t.title, t.subtitle, into->parentWidget());
+        into->addWidget(row);
+    }
+}
+
+// ─── Sub-tab switch ───────────────────────────────────────────────────────
 void WelcomePage::onSubTabClicked(int tab) {
     if (m_contentStack) m_contentStack->setCurrentIndex(tab);
 }
 
 void WelcomePage::setRecentProjects(const QStringList &paths) {
-    if (!m_recentList) return;
-    m_recentList->clear();
-    if (paths.isEmpty()) {
-        auto *empty = new QListWidgetItem(
-            "No recent projects\n   "
-            "Click \"+ New Project\" on the left to get started.");
-        empty->setFlags(Qt::ItemIsEnabled);   // not selectable
-        m_recentList->addItem(empty);
-        return;
-    }
-    for (const QString &p : paths) {
-        QFileInfo fi(p);
-        auto *it = new QListWidgetItem(QString("%1\n   %2")
-                                         .arg(fi.completeBaseName(), fi.absoluteFilePath()));
-        it->setData(Qt::UserRole, fi.absoluteFilePath());
-        m_recentList->addItem(it);
-    }
+    m_recentPaths = paths;
+    rebuildRecentProjects();
 }
