@@ -1,0 +1,50 @@
+# Build directories
+build/
+build-*/
+bin/
+debug/
+release/
+
+# Qt user files
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+*.moc
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+Makefile*
+*.qm
+
+# Qt object/intermediate
+*.o
+*.obj
+*.so
+*.dll
+*.exe
+*.lib
+*.a
+.qmake.cache
+.qmake.stash
+object_script.*
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*~
+*.bak
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Nexor build outputs (compiled artifacts kept separate from source)
+*.abx
+*.frx
+
+# Local user-only project files
+*.local.pro

@@ -1,0 +1,42 @@
+#include "CentralStack.h"
+#include "welcome/WelcomePage.h"
+
+#include <QLabel>
+#include <QVBoxLayout>
+
+namespace {
+QWidget *placeholder(const QString &title, const QString &subtitle) {
+    auto *w = new QWidget;
+    w->setStyleSheet("background:#13151b;");
+    auto *col = new QVBoxLayout(w);
+    col->setAlignment(Qt::AlignCenter);
+    auto *t = new QLabel(title);
+    t->setStyleSheet("color:#5b8cff; font-size:24px; font-weight:300; letter-spacing:3px;");
+    t->setAlignment(Qt::AlignCenter);
+    auto *s = new QLabel(subtitle);
+    s->setStyleSheet("color:#6b7280; font-size:13px;");
+    s->setAlignment(Qt::AlignCenter);
+    s->setWordWrap(true);
+    col->addWidget(t);
+    col->addSpacing(10);
+    col->addWidget(s);
+    return w;
+}
+}
+
+CentralStack::CentralStack(QWidget *parent) : QStackedWidget(parent) {
+    m_welcome = new WelcomePage;
+    addWidget(m_welcome); // PageWelcome
+    addWidget(placeholder("EDITOR",
+        "Open a form or activity from the project tree to begin coding.\n"
+        "VSCode-style editor lands in feature/editor."));
+    addWidget(placeholder("DESIGNER",
+        "Double-click a .frm in the project tree to design its UI.\n"
+        "Designer lands in feature/designer."));
+    addWidget(placeholder("BUILD",
+        "Compilation output will appear here.\n"
+        "Compiler lands in feature/language-compiler."));
+    addWidget(placeholder("DEBUG",
+        "Breakpoint, step and watch panels will live here.\n"
+        "Debugger lands in feature/debugger."));
+}
