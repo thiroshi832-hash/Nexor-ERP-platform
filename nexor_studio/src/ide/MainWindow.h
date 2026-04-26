@@ -1,20 +1,24 @@
 // =============================================================================
-// MainWindow — Nexor Studio top-level window.
+// MainWindow — Nexor Studio top-level window (Qt Creator-style layout).
 //
 //   ┌──────────────────────────────────────────────────────────────────┐
-//   │ Menu bar: File / Edit / View / Build / Run / Debug / Help        │
-//   ├──┬─────────────┬─────────────────────────────────────────────────┤
-//   │S │ Project     │                                                 │
-//   │i │ tree (dock) │   CentralStack                                  │
-//   │d │             │   (Welcome / Editor / Designer / Build / Debug) │
-//   │e │             │                                                 │
-//   │  │             ├─────────────────────────────────────────────────┤
-//   │B │             │   Output dock (build / debug console)           │
-//   │a │             │                                                 │
-//   │r │             │                                                 │
-//   ├──┴─────────────┴─────────────────────────────────────────────────┤
-//   │ Status bar                                                       │
-//   └──────────────────────────────────────────────────────────────────┘
+//   │ Menu bar                                                         │
+//   ├────┬──────────────┬──────────────────────────────────────────────┤
+//   │ F  │ Project      │                                              │
+//   │ a  │ panel        │   Central content (per active mode)          │
+//   │ n  │ (Edit/Debug/ │                                              │
+//   │ c  │  Projects    ├──────────────────────────────────────────────┤
+//   │ y  │  modes only) │   Output content (stacked panes)             │
+//   │ T  │              ├──────────────────────────────────────────────┤
+//   │ a  │              │   1 Issues  2 Search  3 App  4 Compile  5 Dbg│
+//   │ b  │              ├──────────────────────────────────────────────┤
+//   │ B  │              │   Status bar                                 │
+//   │ a  │              │                                              │
+//   │ r  │              │                                              │
+//   └────┴──────────────┴──────────────────────────────────────────────┘
+//
+// In Welcome mode the project panel is hidden so the welcome page fills
+// the full content width — exactly like Qt Creator.
 // =============================================================================
 #ifndef NEXOR_STUDIO_MAINWINDOW_H
 #define NEXOR_STUDIO_MAINWINDOW_H
@@ -22,14 +26,15 @@
 #include <QMainWindow>
 #include <memory>
 
-class SideBar;
+class FancyTabBar;
 class CentralStack;
 class ProjectTree;
+class OutputPane;
 class Project;
-class QPlainTextEdit;
-class QDockWidget;
 class QWidget;
 class QAction;
+class QSplitter;
+class QLabel;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -59,14 +64,18 @@ private:
     void loadProjectFromFile(const QString &path);
     void rememberRecent(const QString &path);
     QStringList loadRecentProjects() const;
+    void applyModeLayout(int mode);
 
-    SideBar        *m_sideBar;
+    FancyTabBar    *m_tabBar;
     CentralStack   *m_central;
     ProjectTree    *m_projectTree;
-    QWidget        *m_projectPanel;     // wraps tree + header
+    QWidget        *m_projectPanel;
+    OutputPane     *m_outputPane;
+    QSplitter      *m_horizontalSplit;
+    QSplitter      *m_verticalSplit;
     QAction        *m_toggleProjectPanelAction;
-    QDockWidget    *m_outputDock;
-    QPlainTextEdit *m_output;
+    QAction        *m_toggleOutputPaneAction;
+    QLabel         *m_statusModeLabel;
 
     std::unique_ptr<Project> m_project;
 };

@@ -9,8 +9,9 @@ INCLUDEPATH += src
 SOURCES += \
     src/main.cpp \
     src/ide/MainWindow.cpp \
-    src/ide/SideBar.cpp \
+    src/ide/FancyTabBar.cpp \
     src/ide/CentralStack.cpp \
+    src/ide/OutputPane.cpp \
     src/welcome/WelcomePage.cpp \
     src/project/Project.cpp \
     src/project/Activity.cpp \
@@ -20,8 +21,9 @@ SOURCES += \
 
 HEADERS += \
     src/ide/MainWindow.h \
-    src/ide/SideBar.h \
+    src/ide/FancyTabBar.h \
     src/ide/CentralStack.h \
+    src/ide/OutputPane.h \
     src/welcome/WelcomePage.h \
     src/project/Project.h \
     src/project/Activity.h \

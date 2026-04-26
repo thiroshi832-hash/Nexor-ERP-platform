@@ -1,6 +1,7 @@
 #include "MainWindow.h"
-#include "SideBar.h"
+#include "FancyTabBar.h"
 #include "CentralStack.h"
+#include "OutputPane.h"
 
 #include "welcome/WelcomePage.h"
 #include "project/Project.h"
@@ -11,7 +12,6 @@
 
 #include <QMenuBar>
 #include <QStatusBar>
-#include <QDockWidget>
 #include <QPlainTextEdit>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -27,23 +27,26 @@
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
-    , m_sideBar(nullptr)
+    , m_tabBar(nullptr)
     , m_central(nullptr)
     , m_projectTree(nullptr)
     , m_projectPanel(nullptr)
+    , m_outputPane(nullptr)
+    , m_horizontalSplit(nullptr)
+    , m_verticalSplit(nullptr)
     , m_toggleProjectPanelAction(nullptr)
-    , m_outputDock(nullptr)
-    , m_output(nullptr) {
+    , m_toggleOutputPaneAction(nullptr)
+    , m_statusModeLabel(nullptr) {
 
     setWindowTitle("Nexor Studio");
-    resize(1280, 820);
+    resize(1320, 860);
     setupUi();
     buildMenus();
-    statusBar()->showMessage("Ready");
 
+    // Initial mode: Welcome
+    applyModeLayout(FancyTabBar::ModeWelcome);
     appendOutput("Nexor Studio started.", "#5b8cff");
 
-    // Populate Welcome page recents.
     m_central->welcomePage()->setRecentProjects(loadRecentProjects());
 }
 
@@ -51,79 +54,85 @@ MainWindow::~MainWindow() = default;
 
 void MainWindow::setupUi() {
     setStyleSheet(R"(
-        QMainWindow         { background:#13151b; }
-        QMenuBar            { background:#0d0e12; color:#dce1e7;
-                              border-bottom:1px solid #1e2030; }
-        QMenuBar::item      { padding:5px 12px; }
+        QMainWindow      { background:#13151b; }
+        QMenuBar         { background:#0d0e12; color:#dce1e7;
+                           border-bottom:1px solid #1e2030; }
+        QMenuBar::item   { padding:5px 12px; }
         QMenuBar::item:selected { background:#1e3a5f; }
-        QMenu               { background:#1b1d23; color:#dce1e7;
-                              border:1px solid #2a3655; }
-        QMenu::item:selected{ background:#1e3a5f; }
-        QStatusBar          { background:#0d0e12; color:#8a95a3;
-                              border-top:1px solid #1e2030; }
-        QDockWidget         { color:#8a95a3; font-size:11px; font-weight:600;
-                              letter-spacing:1px; }
-        QDockWidget::title  { background:#13151b; padding:6px 10px;
-                              border-bottom:1px solid #1e2030; }
-        QPlainTextEdit      { background:#0e1015; color:#dce1e7;
-                              font-family:"Consolas","Courier New",monospace;
-                              font-size:12px; border:none; }
+        QMenu            { background:#1b1d23; color:#dce1e7;
+                           border:1px solid #2a3655; }
+        QMenu::item:selected { background:#1e3a5f; }
+        QStatusBar       { background:#0d0e12; color:#8a95a3;
+                           border-top:1px solid #1e2030; padding:0 8px; }
+        QStatusBar::item { border:none; }
     )");
 
-    // Layout (Qt Creator-style):
-    //   [ SideBar | [ ProjectPanel │ CentralStack ] ]   ← horizontal QSplitter
-    //   The bottom-area Output remains a QDockWidget so it can be hidden/popped.
-
+    // Root layout: [ FancyTabBar | verticalSplitter ]
     auto *shell = new QWidget(this);
     auto *row   = new QHBoxLayout(shell);
     row->setContentsMargins(0, 0, 0, 0);
     row->setSpacing(0);
 
-    m_sideBar = new SideBar(shell);
+    m_tabBar = new FancyTabBar(shell);
+    row->addWidget(m_tabBar);
 
-    auto *splitter = new QSplitter(Qt::Horizontal, shell);
-    splitter->setHandleWidth(1);
-    splitter->setChildrenCollapsible(false);
-    splitter->setStyleSheet("QSplitter::handle{ background:#1e2030; }");
+    // Vertical splitter: top is the [ProjectPanel | Central], bottom is OutputPane
+    m_verticalSplit = new QSplitter(Qt::Vertical, shell);
+    m_verticalSplit->setHandleWidth(1);
+    m_verticalSplit->setChildrenCollapsible(false);
+    m_verticalSplit->setStyleSheet("QSplitter::handle{ background:#1e2030; }");
 
-    // ── Project panel (header + tree) ───────────────────────────────────
-    m_projectPanel = new QWidget(splitter);
+    // Horizontal splitter: project panel | central
+    m_horizontalSplit = new QSplitter(Qt::Horizontal, m_verticalSplit);
+    m_horizontalSplit->setHandleWidth(1);
+    m_horizontalSplit->setChildrenCollapsible(false);
+    m_horizontalSplit->setStyleSheet("QSplitter::handle{ background:#1e2030; }");
+
+    // Project panel (header + tree)
+    m_projectPanel = new QWidget(m_horizontalSplit);
     m_projectPanel->setStyleSheet("background:#13151b;");
     auto *panelCol = new QVBoxLayout(m_projectPanel);
     panelCol->setContentsMargins(0, 0, 0, 0);
     panelCol->setSpacing(0);
-
     auto *panelHeader = new QLabel("PROJECT", m_projectPanel);
     panelHeader->setStyleSheet(
         "QLabel { background:#0d0e12; color:#8a95a3;"
         " padding:8px 12px; border-bottom:1px solid #1e2030;"
         " font-size:11px; font-weight:600; letter-spacing:2px; }");
     panelCol->addWidget(panelHeader);
-
     m_projectTree = new ProjectTree(m_projectPanel);
     panelCol->addWidget(m_projectTree, 1);
 
-    m_central = new CentralStack(splitter);
+    // Central (welcome / editor / designer / build / debug)
+    m_central = new CentralStack(m_horizontalSplit);
 
-    splitter->addWidget(m_projectPanel);
-    splitter->addWidget(m_central);
-    splitter->setStretchFactor(0, 0);
-    splitter->setStretchFactor(1, 1);
-    splitter->setSizes({280, 1000});
+    m_horizontalSplit->addWidget(m_projectPanel);
+    m_horizontalSplit->addWidget(m_central);
+    m_horizontalSplit->setStretchFactor(0, 0);
+    m_horizontalSplit->setStretchFactor(1, 1);
+    m_horizontalSplit->setSizes({ 280, 1000 });
 
-    row->addWidget(m_sideBar);
-    row->addWidget(splitter, 1);
+    // Output pane at bottom
+    m_outputPane = new OutputPane(m_verticalSplit);
+
+    m_verticalSplit->addWidget(m_horizontalSplit);
+    m_verticalSplit->addWidget(m_outputPane);
+    m_verticalSplit->setStretchFactor(0, 1);
+    m_verticalSplit->setStretchFactor(1, 0);
+    m_verticalSplit->setSizes({ 600, 200 });
+
+    row->addWidget(m_verticalSplit, 1);
     setCentralWidget(shell);
 
-    // Output dock (bottom)
-    m_output = new QPlainTextEdit;
-    m_output->setReadOnly(true);
-    m_outputDock = new QDockWidget("OUTPUT", this);
-    m_outputDock->setWidget(m_output);
-    m_outputDock->setMinimumHeight(140);
-    addDockWidget(Qt::BottomDockWidgetArea, m_outputDock);
+    // Status bar
+    m_statusModeLabel = new QLabel("Welcome");
+    m_statusModeLabel->setStyleSheet("color:#5b8cff; font-weight:600;");
+    statusBar()->addPermanentWidget(m_statusModeLabel);
+    statusBar()->showMessage("Ready");
 
-    connect(m_sideBar, &SideBar::modeChanged, this, &MainWindow::onModeChanged);
+    // ── Wiring ────────────────────────────────────────────────────────
+    connect(m_tabBar, &FancyTabBar::currentChanged,
+            this, &MainWindow::onModeChanged);
 
     connect(m_central->welcomePage(), &WelcomePage::newProjectRequested,
             this, &MainWindow::onNewProject);
@@ -165,7 +174,15 @@ void MainWindow::buildMenus() {
         if (m_projectPanel) m_projectPanel->setVisible(on);
     });
     viewMenu->addAction(m_toggleProjectPanelAction);
-    viewMenu->addAction(m_outputDock->toggleViewAction());
+
+    m_toggleOutputPaneAction = new QAction("Output Pane", this);
+    m_toggleOutputPaneAction->setCheckable(true);
+    m_toggleOutputPaneAction->setChecked(true);
+    m_toggleOutputPaneAction->setShortcut(QKeySequence("Alt+9"));
+    connect(m_toggleOutputPaneAction, &QAction::toggled, this, [this](bool on){
+        if (m_outputPane) m_outputPane->setVisible(on);
+    });
+    viewMenu->addAction(m_toggleOutputPaneAction);
 
     auto *buildMenu = menuBar()->addMenu("&Build");
     buildMenu->addAction("Build Project")->setEnabled(false);
@@ -182,9 +199,39 @@ void MainWindow::buildMenus() {
     helpMenu->addAction("&About Nexor Studio", this, &MainWindow::onAbout);
 }
 
+// ─── Mode-driven layout ───────────────────────────────────────────────────
+
 void MainWindow::onModeChanged(int mode) {
-    auto page = static_cast<CentralStack::Page>(mode);
+    applyModeLayout(mode);
+    auto page = static_cast<CentralStack::Page>(
+        mode == FancyTabBar::ModeWelcome ? CentralStack::PageWelcome :
+        mode == FancyTabBar::ModeEdit    ? CentralStack::PageEditor  :
+        mode == FancyTabBar::ModeDesign  ? CentralStack::PageDesigner:
+        mode == FancyTabBar::ModeDebug   ? CentralStack::PageDebug   :
+                                           CentralStack::PageBuild   );
     m_central->showPage(page);
+}
+
+void MainWindow::applyModeLayout(int mode) {
+    static const char *names[] = {
+        "Welcome", "Edit", "Design", "Debug", "Projects", "Help"
+    };
+    if (mode >= 0 && mode < int(sizeof(names)/sizeof(names[0]))) {
+        m_statusModeLabel->setText(names[mode]);
+    }
+
+    // Project panel visibility per Qt Creator:
+    //   visible in Edit / Debug / Projects
+    //   hidden in Welcome / Design / Help
+    bool showProject = (mode == FancyTabBar::ModeEdit
+                     || mode == FancyTabBar::ModeDebug
+                     || mode == FancyTabBar::ModeProjects);
+    if (m_projectPanel) m_projectPanel->setVisible(showProject);
+    if (m_toggleProjectPanelAction) {
+        m_toggleProjectPanelAction->blockSignals(true);
+        m_toggleProjectPanelAction->setChecked(showProject);
+        m_toggleProjectPanelAction->blockSignals(false);
+    }
 }
 
 // ─── Project lifecycle ────────────────────────────────────────────────────
@@ -206,8 +253,7 @@ void MainWindow::onNewProject() {
 
     m_project = std::move(p);
     m_projectTree->setProject(m_project.get());
-    m_central->showPage(CentralStack::PageEditor);
-    m_sideBar->setMode(SideBar::ModeEdit);
+    m_tabBar->setCurrentMode(FancyTabBar::ModeEdit);  // also triggers layout
     rememberRecent(m_project->filePath());
     appendOutput(QString("Created project '%1' at %2")
                     .arg(m.title, m_project->filePath()), "#22c55e");
@@ -231,8 +277,7 @@ void MainWindow::loadProjectFromFile(const QString &path) {
     }
     m_project = std::move(p);
     m_projectTree->setProject(m_project.get());
-    m_central->showPage(CentralStack::PageEditor);
-    m_sideBar->setMode(SideBar::ModeEdit);
+    m_tabBar->setCurrentMode(FancyTabBar::ModeEdit);
     rememberRecent(m_project->filePath());
     appendOutput("Opened " + m_project->filePath(), "#5b8cff");
     setWindowTitle("Nexor Studio — " + m_project->meta().title);
@@ -243,8 +288,7 @@ void MainWindow::onCloseProject() {
     appendOutput("Closed " + m_project->filePath(), "#8a95a3");
     m_project.reset();
     m_projectTree->setProject(nullptr);
-    m_central->showPage(CentralStack::PageWelcome);
-    m_sideBar->setMode(SideBar::ModeProjects);
+    m_tabBar->setCurrentMode(FancyTabBar::ModeWelcome);
     setWindowTitle("Nexor Studio");
 }
 
@@ -282,14 +326,12 @@ void MainWindow::onNewSheet() {
 
 void MainWindow::onFormActivated(const QString &absPath) {
     appendOutput("Open form: " + absPath, "#a3e635");
-    m_central->showPage(CentralStack::PageDesigner);
-    m_sideBar->setMode(SideBar::ModeDesigner);
+    m_tabBar->setCurrentMode(FancyTabBar::ModeDesign);
 }
 
 void MainWindow::onActivityActivated(const QString &absPath) {
     appendOutput("Open activity: " + absPath, "#a3e635");
-    m_central->showPage(CentralStack::PageEditor);
-    m_sideBar->setMode(SideBar::ModeEdit);
+    m_tabBar->setCurrentMode(FancyTabBar::ModeEdit);
 }
 
 void MainWindow::onAbout() {
@@ -302,11 +344,8 @@ void MainWindow::onAbout() {
 // ─── Output panel + recent-projects persistence ───────────────────────────
 
 void MainWindow::appendOutput(const QString &line, const QString &color) {
-    QString stamp = QDateTime::currentDateTime().toString("HH:mm:ss");
-    QString c = color.isEmpty() ? "#dce1e7" : color;
-    m_output->appendHtml(QString("<span style='color:#6b7280'>[%1]</span> "
-                                 "<span style='color:%2'>%3</span>")
-                          .arg(stamp, c, line.toHtmlEscaped()));
+    if (m_outputPane)
+        m_outputPane->appendTo(OutputPane::PaneAppOutput, line, color);
 }
 
 void MainWindow::rememberRecent(const QString &path) {
