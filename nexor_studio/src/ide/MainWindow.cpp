@@ -4,11 +4,16 @@
 #include "OutputPane.h"
 
 #include "welcome/WelcomePage.h"
+#include "editor/CodeEditor.h"
+#include "designer/FormDesigner.h"
 #include "project/Project.h"
 #include "project/Activity.h"
 #include "project/ProjectTree.h"
 #include "dialogs/NewProjectDialog.h"
 #include "dialogs/NewActivityDialog.h"
+
+#include <QFileInfo>
+#include <QDir>
 
 #include <QMenuBar>
 #include <QStatusBar>
@@ -325,13 +330,37 @@ void MainWindow::onNewSheet() {
 }
 
 void MainWindow::onFormActivated(const QString &absPath) {
+    // 1. Load the form into the designer.
+    if (!m_central->formDesigner()->loadForm(absPath)) {
+        appendOutput("Failed to read form: " + absPath, "#ef4444");
+        return;
+    }
     appendOutput("Open form: " + absPath, "#a3e635");
+
+    // 2. Find the activity (.aba) sitting next to the form and load its
+    //    code into the editor.  Per spec, code is at the activity level —
+    //    forms are pure UI definitions.
+    QDir formDir(QFileInfo(absPath).absolutePath());
+    QStringList abas = formDir.entryList(QStringList() << "*.aba", QDir::Files);
+    if (!abas.isEmpty()) {
+        QString abaPath = formDir.absoluteFilePath(abas.first());
+        if (m_central->codeEditor()->loadActivity(abaPath))
+            appendOutput("Loaded code: " + abaPath, "#5b8cff");
+    }
+
+    // 3. Switch to Design mode (user can hit EDIT to see the code).
     m_tabBar->setCurrentMode(FancyTabBar::ModeDesign);
+    m_central->showPage(CentralStack::PageDesigner);
 }
 
 void MainWindow::onActivityActivated(const QString &absPath) {
+    if (!m_central->codeEditor()->loadActivity(absPath)) {
+        appendOutput("Failed to read activity: " + absPath, "#ef4444");
+        return;
+    }
     appendOutput("Open activity: " + absPath, "#a3e635");
     m_tabBar->setCurrentMode(FancyTabBar::ModeEdit);
+    m_central->showPage(CentralStack::PageEditor);
 }
 
 void MainWindow::onAbout() {

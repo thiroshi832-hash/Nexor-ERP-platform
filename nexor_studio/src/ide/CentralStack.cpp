@@ -1,5 +1,8 @@
 #include "CentralStack.h"
+
 #include "welcome/WelcomePage.h"
+#include "editor/CodeEditor.h"
+#include "designer/FormDesigner.h"
 
 #include <QLabel>
 #include <QVBoxLayout>
@@ -25,14 +28,13 @@ QWidget *placeholder(const QString &title, const QString &subtitle) {
 }
 
 CentralStack::CentralStack(QWidget *parent) : QStackedWidget(parent) {
-    m_welcome = new WelcomePage;
-    addWidget(m_welcome); // PageWelcome
-    addWidget(placeholder("EDITOR",
-        "Open a form or activity from the project tree to begin coding.\n"
-        "VSCode-style editor lands in feature/editor."));
-    addWidget(placeholder("DESIGNER",
-        "Double-click a .frm in the project tree to design its UI.\n"
-        "Designer lands in feature/designer."));
+    m_welcome  = new WelcomePage;
+    m_editor   = new CodeEditor;
+    m_designer = new FormDesigner;
+
+    addWidget(m_welcome);   // PageWelcome
+    addWidget(m_editor);    // PageEditor
+    addWidget(m_designer);  // PageDesigner
     addWidget(placeholder("BUILD",
         "Compilation output will appear here.\n"
         "Compiler lands in feature/language-compiler."));

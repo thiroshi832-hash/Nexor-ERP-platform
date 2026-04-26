@@ -13,6 +13,9 @@ SOURCES += \
     src/ide/CentralStack.cpp \
     src/ide/OutputPane.cpp \
     src/welcome/WelcomePage.cpp \
+    src/editor/CodeEditor.cpp \
+    src/editor/NexorHighlighter.cpp \
+    src/designer/FormDesigner.cpp \
     src/project/Project.cpp \
     src/project/Activity.cpp \
     src/project/ProjectTree.cpp \
@@ -25,6 +28,9 @@ HEADERS += \
     src/ide/CentralStack.h \
     src/ide/OutputPane.h \
     src/welcome/WelcomePage.h \
+    src/editor/CodeEditor.h \
+    src/editor/NexorHighlighter.h \
+    src/designer/FormDesigner.h \
     src/project/Project.h \
     src/project/Activity.h \
     src/project/ProjectTree.h \
