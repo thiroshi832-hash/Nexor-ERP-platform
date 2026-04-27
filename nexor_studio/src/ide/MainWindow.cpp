@@ -225,16 +225,18 @@ void MainWindow::applyModeLayout(int mode) {
         m_statusModeLabel->setText(names[mode]);
     }
 
-    // Project panel visibility:
-    //   visible only in Edit / Debug
-    //   hidden everywhere else (Welcome / Design / Projects / Help)
-    bool showProject = (mode == FancyTabBar::ModeEdit
-                     || mode == FancyTabBar::ModeDebug);
-    if (m_projectPanel) m_projectPanel->setVisible(showProject);
+    // Project panel:
+    //   ALLOWED in Edit / Debug only.
+    //   In other modes it is force-hidden AND the View-menu toggle is
+    //   disabled so the user cannot bring it back.
+    bool allowed = (mode == FancyTabBar::ModeEdit
+                 || mode == FancyTabBar::ModeDebug);
+    if (m_projectPanel) m_projectPanel->setVisible(allowed);
     if (m_toggleProjectPanelAction) {
         m_toggleProjectPanelAction->blockSignals(true);
-        m_toggleProjectPanelAction->setChecked(showProject);
+        m_toggleProjectPanelAction->setChecked(allowed);
         m_toggleProjectPanelAction->blockSignals(false);
+        m_toggleProjectPanelAction->setEnabled(allowed);
     }
 }
 
