@@ -225,13 +225,11 @@ void MainWindow::applyModeLayout(int mode) {
         m_statusModeLabel->setText(names[mode]);
     }
 
-    // Project panel visibility per Qt Creator:
-    //   visible in Edit / Design / Debug / Projects
-    //   hidden in Welcome / Help
+    // Project panel visibility:
+    //   visible only in Edit / Debug
+    //   hidden everywhere else (Welcome / Design / Projects / Help)
     bool showProject = (mode == FancyTabBar::ModeEdit
-                     || mode == FancyTabBar::ModeDesign
-                     || mode == FancyTabBar::ModeDebug
-                     || mode == FancyTabBar::ModeProjects);
+                     || mode == FancyTabBar::ModeDebug);
     if (m_projectPanel) m_projectPanel->setVisible(showProject);
     if (m_toggleProjectPanelAction) {
         m_toggleProjectPanelAction->blockSignals(true);
