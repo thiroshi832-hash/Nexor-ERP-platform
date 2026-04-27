@@ -7,6 +7,29 @@
 #include <QLabel>
 #include <QPainter>
 #include <QPainterPath>
+#include <QMimeData>
+#include <QDrag>
+
+// Subclass to encode a custom MIME type (application/x-nexor-widget) carrying
+// the widget type string when the user drags an item.
+namespace {
+class PaletteTree : public QTreeWidget {
+public:
+    explicit PaletteTree(QWidget *parent = nullptr) : QTreeWidget(parent) {}
+protected:
+    QMimeData *mimeData(const QList<QTreeWidgetItem*> items) const override {
+        if (items.isEmpty() || !items.first()->parent()) return nullptr;
+        auto *m = new QMimeData;
+        m->setData("application/x-nexor-widget",
+                   items.first()->data(0, Qt::UserRole).toString().toUtf8());
+        m->setText(items.first()->text(0));   // generic fallback
+        return m;
+    }
+    QStringList mimeTypes() const override {
+        return { "application/x-nexor-widget", "text/plain" };
+    }
+};
+} // namespace
 
 WidgetPalette::WidgetPalette(QWidget *parent) : QWidget(parent) {
     setStyleSheet(R"(
@@ -35,13 +58,14 @@ WidgetPalette::WidgetPalette(QWidget *parent) : QWidget(parent) {
     header->setObjectName("paletteHeader");
     col->addWidget(header);
 
-    m_tree = new QTreeWidget(this);
+    m_tree = new PaletteTree(this);
     m_tree->setHeaderHidden(true);
     m_tree->setIndentation(12);
     m_tree->setUniformRowHeights(true);
     m_tree->setIconSize(QSize(18, 18));
     m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
-    m_tree->setDragEnabled(true);          // future drag-and-drop hook
+    m_tree->setDragEnabled(true);
+    m_tree->setDragDropMode(QAbstractItemView::DragOnly);
     col->addWidget(m_tree, 1);
 
     // ── Common Controls ──

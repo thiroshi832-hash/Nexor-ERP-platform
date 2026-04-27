@@ -5,7 +5,8 @@
 
 #include "welcome/WelcomePage.h"
 #include "editor/CodeEditor.h"
-#include "designer/FormDesigner.h"
+#include "designer/FormCanvas.h"
+#include "runtime/FormRunner.h"
 #include "project/Project.h"
 #include "project/Activity.h"
 #include "project/ProjectTree.h"
@@ -164,6 +165,26 @@ void MainWindow::buildMenus() {
     fileMenu->addAction("&Open Project...", this, &MainWindow::onOpenProject, QKeySequence::Open);
     fileMenu->addAction("&Close Project",   this, &MainWindow::onCloseProject);
     fileMenu->addSeparator();
+    // Save: writes both the editor's code (.aba) and the designer's form (.frm)
+    fileMenu->addAction("&Save", this, [this]{
+        bool any = false;
+        if (m_central->codeEditor() &&
+            !m_central->codeEditor()->currentActivityPath().isEmpty()) {
+            if (m_central->codeEditor()->saveActivity()) {
+                appendOutput("Saved code: " + m_central->codeEditor()->currentActivityPath(), "#22c55e");
+                any = true;
+            }
+        }
+        if (m_central->formCanvas() &&
+            !m_central->formCanvas()->currentFormPath().isEmpty()) {
+            if (m_central->formCanvas()->saveForm()) {
+                appendOutput("Saved form: " + m_central->formCanvas()->currentFormPath(), "#22c55e");
+                any = true;
+            }
+        }
+        if (!any) statusBar()->showMessage("Nothing to save.", 2000);
+    }, QKeySequence::Save);
+    fileMenu->addSeparator();
     fileMenu->addAction("E&xit", this, &QWidget::close, QKeySequence("Ctrl+Q"));
 
     auto *editMenu = menuBar()->addMenu("&Edit");
@@ -194,7 +215,19 @@ void MainWindow::buildMenus() {
     buildMenu->addAction("Clean Project")->setEnabled(false);
 
     auto *runMenu = menuBar()->addMenu("&Run");
-    runMenu->addAction("Run")->setEnabled(false);
+    runMenu->addAction("&Run Form", this, [this]{
+        if (!m_central->formCanvas()
+         || m_central->formCanvas()->currentFormPath().isEmpty()) {
+            QMessageBox::information(this, "Run Form",
+                "Open a form first (double-click a .frm in the project tree).");
+            return;
+        }
+        // Save first so the runner picks up the latest design
+        m_central->formCanvas()->saveForm();
+        QString path = m_central->formCanvas()->currentFormPath();
+        appendOutput("Run form: " + path, "#5b8cff");
+        FormRunner::runForm(path, this);
+    }, QKeySequence(Qt::Key_F5));
 
     auto *dbgMenu = menuBar()->addMenu("&Debug");
     dbgMenu->addAction("Start Debugging")->setEnabled(false);
@@ -331,8 +364,8 @@ void MainWindow::onNewSheet() {
 }
 
 void MainWindow::onFormActivated(const QString &absPath) {
-    // 1. Load the form into the designer.
-    if (!m_central->formDesigner()->loadForm(absPath)) {
+    // 1. Load the form into the canvas.
+    if (!m_central->formCanvas()->loadForm(absPath)) {
         appendOutput("Failed to read form: " + absPath, "#ef4444");
         return;
     }

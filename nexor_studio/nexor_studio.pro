@@ -15,9 +15,12 @@ SOURCES += \
     src/welcome/WelcomePage.cpp \
     src/editor/CodeEditor.cpp \
     src/editor/NexorHighlighter.cpp \
-    src/designer/FormDesigner.cpp \
+    src/designer/WidgetFactory.cpp \
+    src/designer/FormCanvas.cpp \
+    src/designer/PropertyPanel.cpp \
     src/designer/WidgetPalette.cpp \
     src/designer/DesignerView.cpp \
+    src/runtime/FormRunner.cpp \
     src/project/Project.cpp \
     src/project/Activity.cpp \
     src/project/ProjectTree.cpp \
@@ -32,9 +35,12 @@ HEADERS += \
     src/welcome/WelcomePage.h \
     src/editor/CodeEditor.h \
     src/editor/NexorHighlighter.h \
-    src/designer/FormDesigner.h \
+    src/designer/WidgetFactory.h \
+    src/designer/FormCanvas.h \
+    src/designer/PropertyPanel.h \
     src/designer/WidgetPalette.h \
     src/designer/DesignerView.h \
+    src/runtime/FormRunner.h \
     src/project/Project.h \
     src/project/Activity.h \
     src/project/ProjectTree.h \

@@ -3,7 +3,7 @@
 #include "welcome/WelcomePage.h"
 #include "editor/CodeEditor.h"
 #include "designer/DesignerView.h"
-#include "designer/FormDesigner.h"
+#include "designer/FormCanvas.h"
 
 #include <QLabel>
 #include <QVBoxLayout>
@@ -44,6 +44,6 @@ CentralStack::CentralStack(QWidget *parent) : QStackedWidget(parent) {
         "Debugger lands in feature/debugger."));
 }
 
-FormDesigner *CentralStack::formDesigner() const {
-    return m_designerView ? m_designerView->formDesigner() : nullptr;
+FormCanvas *CentralStack::formCanvas() const {
+    return m_designerView ? m_designerView->formCanvas() : nullptr;
 }

@@ -1,9 +1,11 @@
 #include "DesignerView.h"
 #include "WidgetPalette.h"
-#include "FormDesigner.h"
+#include "FormCanvas.h"
+#include "PropertyPanel.h"
 
 #include <QSplitter>
 #include <QHBoxLayout>
+#include <QScrollArea>
 
 DesignerView::DesignerView(QWidget *parent) : QWidget(parent) {
     auto *row = new QHBoxLayout(this);
@@ -15,18 +17,26 @@ DesignerView::DesignerView(QWidget *parent) : QWidget(parent) {
     splitter->setChildrenCollapsible(false);
     splitter->setStyleSheet("QSplitter::handle{ background:#1e2030; }");
 
-    m_palette  = new WidgetPalette(splitter);
-    m_designer = new FormDesigner(splitter);
+    m_palette = new WidgetPalette(splitter);
+
+    // Wrap the canvas in a scroll area so large forms can be panned.
+    auto *scroll = new QScrollArea(splitter);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setStyleSheet("QScrollArea { background:#2d2d30; border:none; }");
+    scroll->setWidgetResizable(true);
+    m_canvas = new FormCanvas(scroll);
+    scroll->setWidget(m_canvas);
+
+    m_props = new PropertyPanel(splitter);
+    m_props->setCanvas(m_canvas);
 
     splitter->addWidget(m_palette);
-    splitter->addWidget(m_designer);
+    splitter->addWidget(scroll);
+    splitter->addWidget(m_props);
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
-    splitter->setSizes({ 200, 1000 });
+    splitter->setStretchFactor(2, 0);
+    splitter->setSizes({ 200, 800, 240 });
 
     row->addWidget(splitter);
-
-    // Bubble palette double-click selection up so MainWindow can act on it.
-    connect(m_palette, &WidgetPalette::widgetSelected,
-            this, &DesignerView::widgetRequestedOnCanvas);
 }

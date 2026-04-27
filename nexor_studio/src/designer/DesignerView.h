@@ -1,9 +1,6 @@
 // =============================================================================
-// DesignerView — composite widget hosting [WidgetPalette | FormDesigner].
-//
-// Replaces the bare FormDesigner that used to sit at PageDesigner in the
-// CentralStack.  Exposes the inner FormDesigner via formDesigner() so
-// MainWindow can still call loadForm()/clearForm() on it.
+// DesignerView — composite Design-mode widget:
+//   [WidgetPalette | FormCanvas (in scroll area) | PropertyPanel]
 // =============================================================================
 #ifndef NEXOR_STUDIO_DESIGNERVIEW_H
 #define NEXOR_STUDIO_DESIGNERVIEW_H
@@ -11,22 +8,22 @@
 #include <QWidget>
 
 class WidgetPalette;
-class FormDesigner;
+class FormCanvas;
+class PropertyPanel;
 
 class DesignerView : public QWidget {
     Q_OBJECT
 public:
     explicit DesignerView(QWidget *parent = nullptr);
 
-    FormDesigner  *formDesigner()  const { return m_designer; }
+    FormCanvas    *formCanvas()    const { return m_canvas; }
     WidgetPalette *widgetPalette() const { return m_palette; }
-
-signals:
-    void widgetRequestedOnCanvas(const QString &type);
+    PropertyPanel *propertyPanel() const { return m_props; }
 
 private:
     WidgetPalette *m_palette;
-    FormDesigner  *m_designer;
+    FormCanvas    *m_canvas;
+    PropertyPanel *m_props;
 };
 
 #endif // NEXOR_STUDIO_DESIGNERVIEW_H
