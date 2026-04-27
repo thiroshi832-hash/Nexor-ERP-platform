@@ -226,9 +226,10 @@ void MainWindow::applyModeLayout(int mode) {
     }
 
     // Project panel visibility per Qt Creator:
-    //   visible in Edit / Debug / Projects
-    //   hidden in Welcome / Design / Help
+    //   visible in Edit / Design / Debug / Projects
+    //   hidden in Welcome / Help
     bool showProject = (mode == FancyTabBar::ModeEdit
+                     || mode == FancyTabBar::ModeDesign
                      || mode == FancyTabBar::ModeDebug
                      || mode == FancyTabBar::ModeProjects);
     if (m_projectPanel) m_projectPanel->setVisible(showProject);
