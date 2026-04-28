@@ -25,6 +25,7 @@ enum class TokKind {
     Return, Exit, Print,
     And, Or, Not, Mod,
     Call, Public, Private,
+    From, Where, OrderBy, Select, Take, Ascending, Descending,
     // ── Operators / punctuation
     Plus, Minus, Star, Slash, Backslash, Caret, Ampersand,
     Eq, NotEq, Lt, LtEq, Gt, GtEq,
