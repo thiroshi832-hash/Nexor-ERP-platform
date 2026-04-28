@@ -30,7 +30,10 @@
 class QTableWidget;
 class QLabel;
 class QPushButton;
+class QStackedWidget;
+class QComboBox;
 class CodeEditor;
+namespace nx { class BpmnCanvas; }
 
 class ProcessEditor : public QWidget {
     Q_OBJECT
@@ -53,6 +56,11 @@ private slots:
     void onRunClicked();
     void onRowChanged(int row);
     void onCodeChanged();
+    void onViewModeChanged(int idx);
+    void onBpmnSelectionChanged(const QString &stepId);
+    void onBpmnModelChanged();
+    void onExportBpmn();
+    void onImportBpmn();
 
 private:
     void setupUi();
@@ -64,11 +72,16 @@ private:
     int                      m_activeRow { -1 };
 
     QLabel        *m_titleLabel;
+    QComboBox     *m_viewCombo;       // Diagram / Table
+    QStackedWidget *m_viewStack;
+    nx::BpmnCanvas *m_canvas;
     QTableWidget  *m_table;
     QPushButton   *m_addBtn;
     QPushButton   *m_removeBtn;
     QPushButton   *m_saveBtn;
     QPushButton   *m_runBtn;
+    QPushButton   *m_exportBtn;
+    QPushButton   *m_importBtn;
     QLabel        *m_codeHeader;
     CodeEditor    *m_codeEditor;
 };

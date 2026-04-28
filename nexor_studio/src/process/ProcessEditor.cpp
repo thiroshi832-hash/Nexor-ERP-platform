@@ -1,5 +1,7 @@
 #include "ProcessEditor.h"
 #include "project/Process.h"
+#include "project/BpmnIo.h"
+#include "process/BpmnCanvas.h"
 #include "editor/CodeEditor.h"
 
 #include <QLabel>
@@ -11,6 +13,11 @@
 #include <QSplitter>
 #include <QComboBox>
 #include <QLineEdit>
+#include <QStackedWidget>
+#include <QFileDialog>
+#include <QFile>
+#include <QFileInfo>
+#include <QMessageBox>
 
 namespace {
 const QStringList kTypes = { "Server", "Choice", "HumanTask", "Final" };
@@ -68,7 +75,7 @@ void ProcessEditor::setupUi() {
     col->setContentsMargins(0, 0, 0, 0);
     col->setSpacing(0);
 
-    // Header row with title + Run button
+    // Header row with title + view-mode picker + Run / Import / Export
     auto *headerRow = new QWidget(this);
     headerRow->setStyleSheet("background:#0d0e12; border-bottom:1px solid #1e2030;");
     auto *hRow = new QHBoxLayout(headerRow);
@@ -77,6 +84,13 @@ void ProcessEditor::setupUi() {
     m_titleLabel->setObjectName("processTitle");
     m_titleLabel->setStyleSheet("border-bottom:none;");
     hRow->addWidget(m_titleLabel, 1);
+    m_viewCombo = new QComboBox(headerRow);
+    m_viewCombo->addItems({"Diagram", "Table"});
+    hRow->addWidget(m_viewCombo);
+    m_importBtn = new QPushButton("Import .bpmn…", headerRow);
+    m_exportBtn = new QPushButton("Export .bpmn…", headerRow);
+    hRow->addWidget(m_importBtn);
+    hRow->addWidget(m_exportBtn);
     m_runBtn = new QPushButton("▶ Run Process", headerRow);
     m_runBtn->setObjectName("runBtn");
     hRow->addWidget(m_runBtn);
@@ -87,12 +101,19 @@ void ProcessEditor::setupUi() {
     split->setChildrenCollapsible(false);
     split->setStyleSheet("QSplitter::handle{ background:#1e2030; }");
 
-    // Top: steps table + buttons
+    // Top: stacked Diagram (BpmnCanvas) / Table view + action buttons
     auto *top = new QWidget;
     auto *topCol = new QVBoxLayout(top);
-    topCol->setContentsMargins(14, 14, 14, 14); topCol->setSpacing(10);
+    topCol->setContentsMargins(0, 0, 0, 0); topCol->setSpacing(0);
 
-    m_table = new QTableWidget(0, 4, top);
+    m_viewStack = new QStackedWidget(top);
+    m_canvas = new nx::BpmnCanvas(top);
+    m_viewStack->addWidget(m_canvas);
+    auto *tableHost = new QWidget(top);
+    auto *thL = new QVBoxLayout(tableHost);
+    thL->setContentsMargins(14, 14, 14, 14); thL->setSpacing(10);
+
+    m_table = new QTableWidget(0, 4, tableHost);
     m_table->setObjectName("stepsTable");
     m_table->setHorizontalHeaderLabels(QStringList() << "ID" << "Type" << "Next" << "Form");
     m_table->verticalHeader()->setVisible(false);
@@ -103,7 +124,7 @@ void ProcessEditor::setupUi() {
     m_table->setColumnWidth(2, 160);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
-    topCol->addWidget(m_table, 1);
+    thL->addWidget(m_table, 1);
 
     auto *btnRow = new QHBoxLayout;
     btnRow->setSpacing(8);
@@ -115,7 +136,9 @@ void ProcessEditor::setupUi() {
     btnRow->addWidget(m_removeBtn);
     btnRow->addStretch();
     btnRow->addWidget(m_saveBtn);
-    topCol->addLayout(btnRow);
+    thL->addLayout(btnRow);
+    m_viewStack->addWidget(tableHost);
+    topCol->addWidget(m_viewStack, 1);
 
     split->addWidget(top);
 
@@ -139,10 +162,88 @@ void ProcessEditor::setupUi() {
     connect(m_removeBtn, &QPushButton::clicked, this, &ProcessEditor::onRemoveStep);
     connect(m_saveBtn,   &QPushButton::clicked, this, &ProcessEditor::onSaveClicked);
     connect(m_runBtn,    &QPushButton::clicked, this, &ProcessEditor::onRunClicked);
+    connect(m_importBtn, &QPushButton::clicked, this, &ProcessEditor::onImportBpmn);
+    connect(m_exportBtn, &QPushButton::clicked, this, &ProcessEditor::onExportBpmn);
+    connect(m_viewCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &ProcessEditor::onViewModeChanged);
+    connect(m_canvas, &nx::BpmnCanvas::stepSelected,
+            this, &ProcessEditor::onBpmnSelectionChanged);
+    connect(m_canvas, &nx::BpmnCanvas::modelChanged,
+            this, &ProcessEditor::onBpmnModelChanged);
     connect(m_table, &QTableWidget::currentCellChanged, this,
             [this](int row, int, int, int){ onRowChanged(row); });
     connect(m_codeEditor, &CodeEditor::textChanged,
             this, &ProcessEditor::onCodeChanged);
+}
+
+void ProcessEditor::onViewModeChanged(int idx) {
+    if (idx == 0 && m_process) m_canvas->rebuild();
+    m_viewStack->setCurrentIndex(idx);
+}
+
+void ProcessEditor::onBpmnSelectionChanged(const QString &stepId) {
+    if (!m_process || stepId.isEmpty()) {
+        m_codeEditor->blockSignals(true);
+        m_codeEditor->clear();
+        m_codeEditor->blockSignals(false);
+        m_codeHeader->setText("STEP CODE");
+        m_activeRow = -1;
+        return;
+    }
+    int idx = m_process->indexOfStep(stepId);
+    if (idx < 0) return;
+    m_activeRow = idx;
+    const StepSpec &st = m_process->steps().at(idx);
+    m_codeHeader->setText(QString("STEP CODE — %1   [%2]").arg(st.id, st.type));
+    m_codeEditor->blockSignals(true);
+    m_codeEditor->setPlainText(st.code);
+    m_codeEditor->blockSignals(false);
+}
+
+void ProcessEditor::onBpmnModelChanged() {
+    rebuildTable();
+    emit modified();
+}
+
+void ProcessEditor::onExportBpmn() {
+    if (!m_process) return;
+    QString suggest = m_process->meta().id.isEmpty()
+        ? "process.bpmn"
+        : m_process->meta().id + ".bpmn";
+    QString path = QFileDialog::getSaveFileName(this, "Export BPMN 2.0",
+        suggest, "BPMN 2.0 (*.bpmn *.xml)");
+    if (path.isEmpty()) return;
+    if (m_activeRow >= 0 && m_activeRow < m_process->steps().size())
+        m_process->steps()[m_activeRow].code = m_codeEditor->toPlainText();
+    m_canvas->syncLayoutToModel();
+    QByteArray bytes = nx::BpmnIo::writeBpmn(*m_process);
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        QMessageBox::warning(this, "Export BPMN",
+                             "Cannot write " + path);
+        return;
+    }
+    f.write(bytes);
+}
+
+void ProcessEditor::onImportBpmn() {
+    if (!m_process) return;
+    QString path = QFileDialog::getOpenFileName(this, "Import BPMN 2.0",
+        QString(), "BPMN 2.0 (*.bpmn *.xml)");
+    if (path.isEmpty()) return;
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly)) {
+        QMessageBox::warning(this, "Import BPMN", "Cannot read " + path);
+        return;
+    }
+    QString err;
+    if (!nx::BpmnIo::readBpmn(f.readAll(), *m_process, &err)) {
+        QMessageBox::warning(this, "Import BPMN", "Parse error: " + err);
+        return;
+    }
+    rebuildTable();
+    m_canvas->setProcess(m_process.get());
+    emit modified();
 }
 
 bool ProcessEditor::loadProcess(const QString &filePath) {
@@ -151,9 +252,11 @@ bool ProcessEditor::loadProcess(const QString &filePath) {
     if (!prc->load()) return false;
     m_process = std::move(prc);
     m_path  = filePath;
-    m_titleLabel->setText("PROCESS — " + m_process->meta().title);
+    QString suffix = m_process->isBpmn() ? "  [BPMN 2.0]" : "  [legacy .prc]";
+    m_titleLabel->setText("PROCESS — " + m_process->meta().title + suffix);
     m_activeRow = -1;
     rebuildTable();
+    m_canvas->setProcess(m_process.get());
     if (m_table->rowCount() > 0) m_table->selectRow(0);
     return true;
 }
@@ -166,6 +269,7 @@ void ProcessEditor::clearProcess() {
     m_titleLabel->setText("PROCESS");
     m_codeHeader->setText("STEP CODE");
     m_activeRow = -1;
+    if (m_canvas) m_canvas->setProcess(nullptr);
 }
 
 void ProcessEditor::rebuildTable() {
@@ -220,6 +324,7 @@ bool ProcessEditor::saveProcess() {
     if (m_activeRow >= 0 && m_activeRow < m_process->steps().size())
         m_process->steps()[m_activeRow].code = m_codeEditor->toPlainText();
     writeBack();
+    if (m_canvas) m_canvas->syncLayoutToModel();
     return m_process->save();
 }
 

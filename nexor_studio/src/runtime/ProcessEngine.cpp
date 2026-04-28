@@ -154,9 +154,24 @@ bool runLoaded(const Process &p,
             }
             nx::Value rv = rt.call(sub);
             if (rt.hadError()) return false;
-            QString target = rv.toText().trimmed();
-            if (target.isEmpty()) target = st.nextId;        // fallback
-            if (target.isEmpty()) return true;               // implicit terminate
+            QString returnValue = rv.toText().trimmed();
+            QString target;
+
+            // BPMN-style: Choice has labelled outgoing branches. Use the
+            // body's return value as the branch key.
+            if (!st.branches.isEmpty()) {
+                for (const auto &b : st.branches) {
+                    if (b.returnValue.compare(returnValue, Qt::CaseInsensitive) == 0) {
+                        target = b.targetId;
+                        break;
+                    }
+                }
+                if (target.isEmpty()) target = st.nextId;       // fallback
+            } else {
+                // Legacy / .prc semantics: the return value IS the step id.
+                target = returnValue.isEmpty() ? st.nextId : returnValue;
+            }
+            if (target.isEmpty()) return true;                  // implicit terminate
             int next = p.indexOfStep(target);
             if (next < 0) {
                 if (err) err(QString("Choice step '%1' returned unknown target '%2'.")

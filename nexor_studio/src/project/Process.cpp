@@ -1,4 +1,5 @@
 #include "Process.h"
+#include "BpmnIo.h"
 
 #include <QFile>
 #include <QFileInfo>
@@ -29,6 +30,10 @@ Process::Process(const ProcessMeta &meta) : Process() {
     m_meta = meta;
 }
 
+bool Process::isBpmn() const {
+    return m_filePath.endsWith(".bpmn", Qt::CaseInsensitive);
+}
+
 int Process::indexOfStep(const QString &id) const {
     for (int i = 0; i < m_steps.size(); ++i)
         if (m_steps.at(i).id.compare(id, Qt::CaseInsensitive) == 0) return i;
@@ -45,6 +50,14 @@ bool Process::save() const {
     if (m_filePath.isEmpty()) return false;
     QFileInfo fi(m_filePath);
     QDir().mkpath(fi.absolutePath());
+
+    if (isBpmn()) {
+        QByteArray bytes = nx::BpmnIo::writeBpmn(*this);
+        QFile f(m_filePath);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
+        f.write(bytes);
+        return true;
+    }
 
     QFile f(m_filePath);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
@@ -84,7 +97,19 @@ bool Process::save() const {
 bool Process::load() {
     QFile f(m_filePath);
     if (!f.open(QIODevice::ReadOnly)) return false;
-    QXmlStreamReader r(&f);
+    QByteArray bytes = f.readAll();
+    f.close();
+
+    // BPMN 2.0 takes precedence — that's the canonical format.  Legacy .prc
+    // files starting with <Process> still load, and Studio offers to upgrade
+    // them on first save.
+    if (nx::BpmnIo::sniff(bytes)) {
+        QString err;
+        bool ok = nx::BpmnIo::readBpmn(bytes, *this, &err);
+        return ok;
+    }
+
+    QXmlStreamReader r(bytes);
     m_steps.clear();
     while (!r.atEnd()) {
         r.readNext();

@@ -37,9 +37,11 @@ SOURCES += \
     src/project/Activity.cpp \
     src/project/Sheet.cpp \
     src/project/Process.cpp \
+    src/project/BpmnIo.cpp \
     src/project/ProjectTree.cpp \
     src/sheet/SheetEditor.cpp \
     src/process/ProcessEditor.cpp \
+    src/process/BpmnCanvas.cpp \
     src/dialogs/NewProjectDialog.cpp \
     src/dialogs/NewActivityDialog.cpp \
     src/dialogs/NewSheetDialog.cpp \
@@ -80,9 +82,11 @@ HEADERS += \
     src/project/Activity.h \
     src/project/Sheet.h \
     src/project/Process.h \
+    src/project/BpmnIo.h \
     src/project/ProjectTree.h \
     src/sheet/SheetEditor.h \
     src/process/ProcessEditor.h \
+    src/process/BpmnCanvas.h \
     src/dialogs/NewProjectDialog.h \
     src/dialogs/NewActivityDialog.h \
     src/dialogs/NewSheetDialog.h \
