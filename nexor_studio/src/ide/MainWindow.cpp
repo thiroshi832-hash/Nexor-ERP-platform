@@ -52,6 +52,9 @@
 #include <QAction>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QFormLayout>
+#include <QPushButton>
+#include <QLineEdit>
 #include <QDateTime>
 
 MainWindow::MainWindow(QWidget *parent)
@@ -378,7 +381,10 @@ void MainWindow::buildMenus() {
         appendOutput(QString("Building %1 v%2…")
                         .arg(m_project->meta().id, version), "#5b8cff");
 
-        auto res = nx::PackageBuilder::buildAndWrite(*m_project, version);
+        // Optional HMAC signing key — if the user configured one under
+        // Publish/SigningKey, the package is signed in-place during build.
+        QByteArray signingKey = s.value("Publish/SigningKey").toString().toUtf8();
+        auto res = nx::PackageBuilder::buildAndWrite(*m_project, version, signingKey);
         if (!res.ok) {
             appendOutput("Build failed: " + res.error, "#ef4444");
             QMessageBox::warning(this, "Build Package", res.error);
@@ -404,6 +410,9 @@ void MainWindow::buildMenus() {
                         .arg(rd.package.processes.size()),
                      "#22c55e");
         appendOutput("Hash: " + res.meta.hash.left(16) + "…", "#8a95a3");
+        if (!signingKey.isEmpty())
+            appendOutput("Signed (" + res.meta.sigAlgo + "): "
+                         + res.meta.signature.left(16) + "…", "#8a95a3");
         statusBar()->showMessage("Package built — " + res.outputPath, 5000);
     }, QKeySequence("Ctrl+B"));
 
@@ -469,6 +478,9 @@ void MainWindow::buildMenus() {
         req.setHeader(QNetworkRequest::ContentTypeHeader,
                       "application/x-nexor-package");
         req.setRawHeader("Accept", "application/json");
+        QString token = s.value("Publish/AdminToken").toString();
+        if (!token.isEmpty())
+            req.setRawHeader("Authorization", ("Bearer " + token).toUtf8());
         QNetworkReply *reply = nam->post(req, bytes);
         connect(reply, &QNetworkReply::finished, this, [this, reply, nam, fileName]{
             QByteArray body = reply->readAll();
@@ -490,6 +502,41 @@ void MainWindow::buildMenus() {
     }, QKeySequence("Ctrl+Shift+P"));
 
     buildMenu->addAction("Clean Project")->setEnabled(false);
+    buildMenu->addSeparator();
+
+    // Publishing settings — Core URL + bearer token + signing key all live
+    // in QSettings; this dialog gives them a one-stop edit surface.
+    buildMenu->addAction("&Publishing Settings...", this, [this]{
+        QSettings s;
+        QDialog dlg(this);
+        dlg.setWindowTitle("Publishing Settings");
+        auto *form = new QFormLayout(&dlg);
+        auto *urlEdit   = new QLineEdit(s.value("Publish/CoreUrl",
+                            "http://localhost:7421").toString());
+        auto *tokenEdit = new QLineEdit(s.value("Publish/AdminToken").toString());
+        auto *keyEdit   = new QLineEdit(s.value("Publish/SigningKey").toString());
+        urlEdit  ->setPlaceholderText("http://localhost:7421");
+        tokenEdit->setPlaceholderText("(leave blank for permissive Core)");
+        keyEdit  ->setPlaceholderText("(leave blank for unsigned packages)");
+        urlEdit  ->setMinimumWidth(360);
+        form->addRow("Core URL:",       urlEdit);
+        form->addRow("Admin token:",    tokenEdit);
+        form->addRow("Signing key:",    keyEdit);
+        auto *bb = new QHBoxLayout;
+        auto *cancel = new QPushButton("Cancel");
+        auto *save   = new QPushButton("Save");
+        save->setDefault(true);
+        bb->addStretch(); bb->addWidget(cancel); bb->addWidget(save);
+        form->addRow(bb);
+        connect(save,   &QPushButton::clicked, &dlg, &QDialog::accept);
+        connect(cancel, &QPushButton::clicked, &dlg, &QDialog::reject);
+        if (dlg.exec() == QDialog::Accepted) {
+            s.setValue("Publish/CoreUrl",    urlEdit->text().trimmed());
+            s.setValue("Publish/AdminToken", tokenEdit->text());
+            s.setValue("Publish/SigningKey", keyEdit->text());
+            appendOutput("Publishing settings saved.", "#8a95a3");
+        }
+    });
 
     auto *runMenu = menuBar()->addMenu("&Run");
     runMenu->addAction("&Run Form", this, [this]{

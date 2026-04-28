@@ -34,15 +34,22 @@ public:
     // writes it to <projectRoot>/dist/<id>-<version>.nexor, and returns
     // metadata about the result.  `version` is a SemVer string supplied by
     // the user (e.g. "0.4.1").
-    static Result buildAndWrite(const Project &project, const QString &version);
+    //
+    // When `signingKey` is non-empty the manifest gains a <Signature> element
+    // that any Core started with the matching --signing-key will accept; an
+    // unsigned package is also valid against a permissive Core.
+    static Result buildAndWrite(const Project &project,
+                                const QString &version,
+                                const QByteArray &signingKey = {});
 
     // Lower-level: collects every artifact into an in-memory Package.
     // Useful for tests and for Flux's "run a project directly" path.
     static bool collect(const Project &project, Package &out, QString *error = nullptr);
 
     // Serialises an in-memory Package to a single XML byte stream.
-    // Computes (or re-computes) the manifest hash before writing.
-    static QByteArray serialise(Package &package);
+    // Computes (or re-computes) the manifest hash before writing, and — if
+    // `signingKey` is non-empty — the manifest signature too.
+    static QByteArray serialise(Package &package, const QByteArray &signingKey = {});
 };
 
 } // namespace nx

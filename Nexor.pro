@@ -15,8 +15,10 @@ CONFIG  += ordered
 SUBDIRS = \
     nexor_core \
     nexor_flux \
-    nexor_studio
+    nexor_studio \
+    nexor_command
 
-nexor_core.subdir   = nexor_core
-nexor_flux.subdir   = nexor_flux
-nexor_studio.subdir = nexor_studio
+nexor_core.subdir    = nexor_core
+nexor_flux.subdir    = nexor_flux
+nexor_studio.subdir  = nexor_studio
+nexor_command.subdir = nexor_command
