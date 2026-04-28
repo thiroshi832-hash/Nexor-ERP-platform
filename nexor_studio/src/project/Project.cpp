@@ -66,6 +66,40 @@ std::shared_ptr<Activity> Project::createAtomicActivity(const ActivityMeta &meta
     return act;
 }
 
+std::shared_ptr<Sheet> Project::createSheet(const SheetMeta &meta, QString *errorOut) {
+    if (meta.id.trimmed().isEmpty()) {
+        if (errorOut) *errorOut = "Sheet ID must not be empty.";
+        return nullptr;
+    }
+    for (const auto &s : m_sheets) {
+        if (s->meta().id.compare(meta.id, Qt::CaseInsensitive) == 0) {
+            if (errorOut) *errorOut = QString("Sheet '%1' already exists.").arg(meta.id);
+            return nullptr;
+        }
+    }
+    QString root = rootDir();
+    if (root.isEmpty()) {
+        if (errorOut) *errorOut = "Project must be saved before adding sheets.";
+        return nullptr;
+    }
+
+    QString shtDir  = root + "/sheets/" + meta.id;
+    QString shtPath = shtDir + "/" + meta.id + ".sht";
+    if (!QDir().mkpath(shtDir)) {
+        if (errorOut) *errorOut = "Could not create sheet directory: " + shtDir;
+        return nullptr;
+    }
+    auto sht = std::make_shared<Sheet>(meta);
+    sht->setFilePath(shtPath);
+    if (!sht->save()) {
+        if (errorOut) *errorOut = "Could not write sheet file: " + shtPath;
+        return nullptr;
+    }
+    m_sheets.append(sht);
+    save();
+    return sht;
+}
+
 bool Project::save() const {
     if (m_filePath.isEmpty()) return false;
     QDir().mkpath(QFileInfo(m_filePath).absolutePath());
@@ -104,7 +138,16 @@ bool Project::save() const {
     w.writeEndElement();
 
     writeStringList("ProcessActivities", "Process",  m_processActivities);
-    writeStringList("Sheets",            "Sheet",    m_sheets);
+
+    w.writeStartElement("Sheets");
+    for (const auto &s : m_sheets) {
+        w.writeStartElement("Sheet");
+        w.writeAttribute("id",   s->meta().id);
+        w.writeAttribute("file", QDir(rootDir()).relativeFilePath(s->filePath()));
+        w.writeEndElement();
+    }
+    w.writeEndElement();
+
     writeStringList("Reports",           "Report",   m_reports);
     writeStringList("Resources",         "Resource", m_resources);
 
@@ -132,7 +175,6 @@ bool Project::load() {
         else if (name == "Created")     m_meta.created     = QDateTime::fromString(r.readElementText(), Qt::ISODate);
         else if (name == "Event")       m_events           << r.readElementText();
         else if (name == "Process")     m_processActivities<< r.readElementText();
-        else if (name == "Sheet")       m_sheets           << r.readElementText();
         else if (name == "Report")      m_reports          << r.readElementText();
         else if (name == "Resource")    m_resources        << r.readElementText();
         else if (name == "Activity") {
@@ -141,6 +183,14 @@ bool Project::load() {
             act->setFilePath(QDir(rootDir()).absoluteFilePath(rel));
             act->load();
             m_atomicActivities.append(act);
+        }
+        else if (name == "Sheet" && r.attributes().hasAttribute("file")) {
+            // New format: Sheet element references a .sht file.
+            QString rel = r.attributes().value("file").toString();
+            auto sht = std::make_shared<Sheet>();
+            sht->setFilePath(QDir(rootDir()).absoluteFilePath(rel));
+            sht->load();
+            m_sheets.append(sht);
         }
     }
     return !r.hasError();

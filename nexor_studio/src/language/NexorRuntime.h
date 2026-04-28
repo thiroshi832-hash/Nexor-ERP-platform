@@ -9,8 +9,11 @@
 #define NEXOR_STUDIO_LANG_NEXORRUNTIME_H
 
 #include "Interpreter.h"
+#include "EntityStore.h"
 #include <QString>
 #include <memory>
+
+class Project;     // forward — Studio's project model
 
 namespace nx {
 
@@ -21,6 +24,10 @@ public:
     bool compile(const QString &source, const QString &unitName = "<unit>");
     Value call(const QString &name, const QVector<Value> &args = {});
     bool  hasSub(const QString &name) const;
+
+    // Registers every sheet in a Project so the language can see them as
+    // first-class entity types (Customer.Find(1) etc.).  Idempotent.
+    void registerProjectSheets(const Project *project);
 
     void setOutput(Interpreter::OutputCallback cb) { m_interp->setOutput(std::move(cb)); }
     void setError (Interpreter::OutputCallback cb) { m_interp->setError (std::move(cb)); }

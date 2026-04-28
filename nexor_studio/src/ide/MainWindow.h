@@ -56,6 +56,7 @@ private slots:
 
     void onFormActivated(const QString &absPath);
     void onActivityActivated(const QString &absPath);
+    void onSheetActivated(const QString &absPath);
 
 private:
     void setupUi();

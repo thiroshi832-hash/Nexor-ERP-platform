@@ -156,7 +156,19 @@ StmtPtr Parser::parseAssignOrExpr() {
         return std::make_shared<AssignStatement>(name.line, name.lexeme, v);
     }
     int line = peek().line;
+    // Parse a primary-then-postfix expression; if it ends with a member
+    // access AND is followed by '=', it's a member-assignment statement.
     ExprPtr e = parseExpr();
+    if (check(TokKind::Eq) && e && e->kind == Expr::Member) {
+        advance();                      // consume =
+        ExprPtr v = parseExpr();
+        consumeNewline();
+        auto *m = static_cast<MemberExpr*>(e.get());
+        return std::make_shared<MemberAssignStatement>(line,
+                                                      m->object,
+                                                      m->property,
+                                                      v);
+    }
     consumeNewline();
     return std::make_shared<ExprStatement>(line, e);
 }
@@ -202,6 +214,28 @@ StmtPtr Parser::parseWhile() {
 StmtPtr Parser::parseFor() {
     int line = peek().line;
     advance();                          // consume For
+
+    // For Each <ident> In <collection> ... Next
+    if (check(TokKind::Ident) && peek().lexeme.compare("Each", Qt::CaseInsensitive) == 0) {
+        advance();                      // consume Each
+        auto fe = std::make_shared<ForEachStatement>(line);
+        Token name = expect(TokKind::Ident, "loop variable");
+        fe->var = name.lexeme;
+        // 'In' isn't a reserved keyword in our lexer — it'll be an Ident.
+        if (check(TokKind::Ident) && peek().lexeme.compare("In", Qt::CaseInsensitive) == 0) {
+            advance();
+        } else {
+            errorAt(peek(), "expected 'In' after For Each variable");
+        }
+        fe->collection = parseExpr();
+        consumeNewline();
+        fe->body = parseStmts({TokKind::Next});
+        expect(TokKind::Next, "'Next'");
+        if (check(TokKind::Ident)) advance();   // optional loop-var name
+        consumeNewline();
+        return fe;
+    }
+
     auto s = std::make_shared<ForStatement>(line);
     Token name = expect(TokKind::Ident, "loop variable");
     s->var = name.lexeme;
@@ -334,10 +368,21 @@ ExprPtr Parser::parsePostfix() {
             advance();
             Token p = expect(TokKind::Ident, "property name");
             e = std::make_shared<MemberExpr>(p.line, e, p.lexeme);
+            // Allow:  obj.method(args)  immediately after the property.
+            if (check(TokKind::LParen)) {
+                advance();
+                QVector<ExprPtr> args = parseArgs();
+                expect(TokKind::RParen, "')'");
+                // Encode method call as a CallExpr whose name is "@member"
+                // and whose first arg is the receiver MemberExpr.  The
+                // interpreter recognises this idiom.
+                auto recv = e;
+                auto call = std::make_shared<CallExpr>(p.line, "@member", QVector<ExprPtr>{recv});
+                for (const auto &a : args) call->args.append(a);
+                e = call;
+            }
             continue;
         }
-        // Call: an Ident followed by ( becomes a CallExpr (handled in
-        // parsePrimary as well; here we don't allow chained calls).
         break;
     }
     return e;

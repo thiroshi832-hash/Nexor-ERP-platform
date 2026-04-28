@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "Activity.h"
+#include "Sheet.h"
 
 struct ProjectMeta {
     QString   title;
@@ -45,19 +46,20 @@ public:
     QStringList &events()             { return m_events; }
     QVector<std::shared_ptr<Activity>> &atomicActivities() { return m_atomicActivities; }
     QStringList &processActivities()  { return m_processActivities; }
-    QStringList &sheets()             { return m_sheets; }
+    QVector<std::shared_ptr<Sheet>> &sheets() { return m_sheets; }
     QStringList &reports()            { return m_reports; }
     QStringList &resources()          { return m_resources; }
 
     const QStringList &events()             const { return m_events; }
     const QVector<std::shared_ptr<Activity>> &atomicActivities() const { return m_atomicActivities; }
     const QStringList &processActivities()  const { return m_processActivities; }
-    const QStringList &sheets()             const { return m_sheets; }
+    const QVector<std::shared_ptr<Sheet>> &sheets() const { return m_sheets; }
     const QStringList &reports()            const { return m_reports; }
     const QStringList &resources()          const { return m_resources; }
 
     // Higher-level operations
     std::shared_ptr<Activity> createAtomicActivity(const ActivityMeta &meta, QString *errorOut = nullptr);
+    std::shared_ptr<Sheet>    createSheet(const SheetMeta &meta, QString *errorOut = nullptr);
 
     bool save() const;
     bool load();
@@ -74,7 +76,7 @@ private:
     QStringList                          m_events;
     QVector<std::shared_ptr<Activity>>   m_atomicActivities;
     QStringList                          m_processActivities;
-    QStringList                          m_sheets;
+    QVector<std::shared_ptr<Sheet>>      m_sheets;
     QStringList                          m_reports;
     QStringList                          m_resources;
 };
