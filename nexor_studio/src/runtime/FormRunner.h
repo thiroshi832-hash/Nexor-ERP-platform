@@ -34,6 +34,16 @@ public:
                         OutputFn out          = nullptr,
                         OutputFn err          = nullptr,
                         const Project *project= nullptr);
+
+    // Same shape as runForm, but the dialog runs modally (exec) and the call
+    // blocks until the user closes it.  Returns true if the dialog was
+    // accepted, false if it was rejected (e.g. window-close == reject).
+    // Used by ProcessEngine for HumanTask steps.
+    static bool runFormModal(const QString &filePath,
+                             QWidget *parent       = nullptr,
+                             OutputFn out          = nullptr,
+                             OutputFn err          = nullptr,
+                             const Project *project= nullptr);
 };
 
 #endif // NEXOR_STUDIO_FORMRUNNER_H

@@ -161,16 +161,54 @@ struct FormContext {
 };
 } // namespace
 
+// Shared builder.  Returns the assembled QDialog (parent owns it).  When
+// `modal` is true the dialog has WA_DeleteOnClose disabled so the caller can
+// inspect dialog->result() after exec(); the caller is responsible for
+// destroying the dialog.
+namespace {
+QDialog *buildFormDialog(const QString &filePath,
+                        QWidget *parent,
+                        FormRunner::OutputFn out,
+                        FormRunner::OutputFn err,
+                        const Project *project,
+                        bool modal);
+}
+
 bool FormRunner::runForm(const QString &filePath,
                          QWidget *parent,
                          OutputFn out,
                          OutputFn err,
                          const Project *project) {
+    QDialog *dlg = buildFormDialog(filePath, parent, out, err, project, /*modal*/false);
+    if (!dlg) return false;
+    dlg->show();
+    return true;
+}
+
+bool FormRunner::runFormModal(const QString &filePath,
+                              QWidget *parent,
+                              OutputFn out,
+                              OutputFn err,
+                              const Project *project) {
+    QDialog *dlg = buildFormDialog(filePath, parent, out, err, project, /*modal*/true);
+    if (!dlg) return false;
+    int rc = dlg->exec();
+    delete dlg;
+    return rc == QDialog::Accepted;
+}
+
+namespace {
+QDialog *buildFormDialog(const QString &filePath,
+                         QWidget *parent,
+                         FormRunner::OutputFn out,
+                         FormRunner::OutputFn err,
+                         const Project *project,
+                         bool modal) {
     FormSpec spec;
-    if (!readFormFile(filePath, spec)) return false;
+    if (!readFormFile(filePath, spec)) return nullptr;
 
     auto *dlg = new QDialog(parent);
-    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    if (!modal) dlg->setAttribute(Qt::WA_DeleteOnClose);
     dlg->setWindowTitle(spec.title);
     dlg->resize(spec.w, spec.h);
 
@@ -204,10 +242,16 @@ bool FormRunner::runForm(const QString &filePath,
     }
 
     // Install Form bridge — Form.Save() / Load(id) / New() / Delete() / Current.
+    // Plus Form.Accept() / Form.Reject() / Form.Close() for modal HumanTask
+    // dialogs (no-op on modeless show()-ed forms — accept() just hides them).
     auto interp = rt->interpreter();
-    interp->setFormHandler([ctx](const QString &method,
-                                 const QVector<nx::Value> &args) -> nx::Value {
+    QPointer<QDialog> dlgPtr(dlg);
+    interp->setFormHandler([ctx, dlgPtr](const QString &method,
+                                          const QVector<nx::Value> &args) -> nx::Value {
         QString lo = method.toLower();
+        if (lo == "accept") { if (dlgPtr) dlgPtr->accept(); return nx::Value::boolean(true); }
+        if (lo == "reject") { if (dlgPtr) dlgPtr->reject(); return nx::Value::boolean(true); }
+        if (lo == "close")  { if (dlgPtr) dlgPtr->close();  return nx::Value::boolean(true); }
         if (ctx->dataSource.isEmpty() || !ctx->store) return nx::Value();
         nx::EntityTable *table = ctx->store->table(ctx->dataSource);
         if (!table) return nx::Value();
@@ -262,9 +306,9 @@ bool FormRunner::runForm(const QString &filePath,
     QObject::connect(dlg, &QDialog::destroyed, [rt]{
         if (rt->hasSub("Form_Unload")) rt->call("Form_Unload");
     });
-    dlg->show();
     QTimer::singleShot(0, dlg, [rt]{
         if (rt->hasSub("Form_Load")) rt->call("Form_Load");
     });
-    return true;
+    return dlg;
 }
+} // namespace

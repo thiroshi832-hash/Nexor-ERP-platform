@@ -69,6 +69,8 @@ bool Process::save() const {
         w.writeAttribute("type", st.type);
         if (!st.nextId.isEmpty())
             w.writeAttribute("next", st.nextId);
+        if (!st.formId.isEmpty())
+            w.writeAttribute("form", st.formId);
         w.writeCDATA(st.code);
         w.writeEndElement();
     }
@@ -100,6 +102,7 @@ bool Process::load() {
             st.type   = a.value("type").toString();
             if (st.type.isEmpty()) st.type = "Server";
             st.nextId = a.value("next").toString();
+            st.formId = a.value("form").toString();
             st.code   = r.readElementText(); // CDATA flattens to text here
             if (!st.id.isEmpty()) m_steps.append(st);
         }

@@ -13,7 +13,7 @@
 #include <QLineEdit>
 
 namespace {
-const QStringList kTypes = { "Server", "Final" };
+const QStringList kTypes = { "Server", "Choice", "HumanTask", "Final" };
 } // namespace
 
 ProcessEditor::ProcessEditor(QWidget *parent) : QWidget(parent) {
@@ -92,14 +92,15 @@ void ProcessEditor::setupUi() {
     auto *topCol = new QVBoxLayout(top);
     topCol->setContentsMargins(14, 14, 14, 14); topCol->setSpacing(10);
 
-    m_table = new QTableWidget(0, 3, top);
+    m_table = new QTableWidget(0, 4, top);
     m_table->setObjectName("stepsTable");
-    m_table->setHorizontalHeaderLabels(QStringList() << "ID" << "Type" << "Next");
+    m_table->setHorizontalHeaderLabels(QStringList() << "ID" << "Type" << "Next" << "Form");
     m_table->verticalHeader()->setVisible(false);
     m_table->verticalHeader()->setDefaultSectionSize(28);
     m_table->horizontalHeader()->setStretchLastSection(true);
-    m_table->setColumnWidth(0, 200);
-    m_table->setColumnWidth(1, 120);
+    m_table->setColumnWidth(0, 180);
+    m_table->setColumnWidth(1, 110);
+    m_table->setColumnWidth(2, 160);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     topCol->addWidget(m_table, 1);
@@ -187,6 +188,10 @@ void ProcessEditor::rebuildTable() {
         // Next
         auto *nextEdit = new QLineEdit(st.nextId);
         m_table->setCellWidget(row, 2, nextEdit);
+        // Form (HumanTask only — but always editable so the user can prep a row)
+        auto *formEdit = new QLineEdit(st.formId);
+        formEdit->setPlaceholderText("HumanTask only — e.g. Approve.frm");
+        m_table->setCellWidget(row, 3, formEdit);
     }
     m_table->blockSignals(false);
 }
@@ -204,6 +209,8 @@ void ProcessEditor::writeBack() {
             st.type = c->currentText();
         if (auto *e = qobject_cast<QLineEdit*>(m_table->cellWidget(row, 2)))
             st.nextId = e->text().trimmed();
+        if (auto *e = qobject_cast<QLineEdit*>(m_table->cellWidget(row, 3)))
+            st.formId = e->text().trimmed();
     }
 }
 
