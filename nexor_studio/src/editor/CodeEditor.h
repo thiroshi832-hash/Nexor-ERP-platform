@@ -15,13 +15,25 @@ class LineNumberArea;
 class CodeEditor : public QPlainTextEdit {
     Q_OBJECT
 public:
+    enum Kind { KindNone, KindActivity, KindForm };
+
     explicit CodeEditor(QWidget *parent = nullptr);
     ~CodeEditor() override;
 
-    bool    loadActivity(const QString &abaPath);   // reads .aba -> sets text
-    bool    saveActivity();                          // writes text back to .aba
-    void    clearActivity();
-    QString currentActivityPath() const { return m_path; }
+    // Activity (.aba): Sub Main + globals.
+    bool    loadActivity(const QString &abaPath);
+    bool    saveActivity();
+
+    // Form (.frm): event-driven code that lives alongside the widgets.
+    bool    loadForm(const QString &frmPath);
+    bool    saveForm();    // read-modify-write so widgets are preserved
+
+    void    clearContent();
+
+    Kind    currentKind()         const { return m_kind; }
+    QString currentFilePath()     const { return m_path; }
+    QString currentActivityPath() const   // backwards-compat
+        { return (m_kind == KindActivity) ? m_path : QString(); }
 
     // Used by LineNumberArea
     void lineNumberAreaPaintEvent(QPaintEvent *event);
@@ -39,6 +51,7 @@ private:
     LineNumberArea   *m_lineNumberArea;
     NexorHighlighter *m_highlighter;
     QString           m_path;
+    Kind              m_kind { KindNone };
 };
 
 // ────────────────────────────────────────────────────────────────────────────

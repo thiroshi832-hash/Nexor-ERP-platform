@@ -3,6 +3,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
+#include <QDateTime>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
@@ -92,6 +93,22 @@ bool Activity::writeBlankForm(const QString &filePath, const QString &formId) {
     w.writeEndElement();
     w.writeStartElement("Widgets"); // empty designer canvas
     w.writeEndElement();
+
+    // Event-driven code for this form (Form_Load + per-widget click handlers
+    // get added here as the user wires events).  Lives in the .frm so the
+    // form is fully self-contained.
+    w.writeStartElement("Code");
+    QString starter = QString(
+        "' %1 — generated %2\n"
+        "' Event-driven code for this form.\n"
+        "\n"
+        "Sub Form_Load()\n"
+        "    ' Fires once when the form opens.\n"
+        "End Sub\n"
+    ).arg(formId, QDateTime::currentDateTime().toString(Qt::ISODate));
+    w.writeCDATA(starter);
+    w.writeEndElement();
+
     w.writeEndElement(); // Form
     w.writeEndDocument();
     return true;

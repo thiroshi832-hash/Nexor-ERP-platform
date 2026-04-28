@@ -165,23 +165,43 @@ void MainWindow::buildMenus() {
     fileMenu->addAction("&Open Project...", this, &MainWindow::onOpenProject, QKeySequence::Open);
     fileMenu->addAction("&Close Project",   this, &MainWindow::onCloseProject);
     fileMenu->addSeparator();
-    // Save: writes both the editor's code (.aba) and the designer's form (.frm)
+    // Save: coordinates editor and canvas so we never lose either side's edits.
     fileMenu->addAction("&Save", this, [this]{
+        auto *ed = m_central->codeEditor();
+        auto *cv = m_central->formCanvas();
         bool any = false;
-        if (m_central->codeEditor() &&
-            !m_central->codeEditor()->currentActivityPath().isEmpty()) {
-            if (m_central->codeEditor()->saveActivity()) {
-                appendOutput("Saved code: " + m_central->codeEditor()->currentActivityPath(), "#22c55e");
+
+        // Same .frm in both editor (form mode) and canvas → single combined save.
+        bool sameFrm = (ed && cv
+                     && ed->currentKind() == CodeEditor::KindForm
+                     && !ed->currentFilePath().isEmpty()
+                     && ed->currentFilePath() == cv->currentFormPath());
+
+        if (sameFrm) {
+            cv->setCode(ed->toPlainText());     // push editor text into canvas
+            if (cv->saveForm()) {
+                appendOutput("Saved form: " + cv->currentFormPath(), "#22c55e");
                 any = true;
             }
-        }
-        if (m_central->formCanvas() &&
-            !m_central->formCanvas()->currentFormPath().isEmpty()) {
-            if (m_central->formCanvas()->saveForm()) {
-                appendOutput("Saved form: " + m_central->formCanvas()->currentFormPath(), "#22c55e");
-                any = true;
+        } else {
+            // Independent saves of whichever side has content.
+            if (ed) {
+                if (ed->currentKind() == CodeEditor::KindActivity && ed->saveActivity()) {
+                    appendOutput("Saved activity: " + ed->currentFilePath(), "#22c55e");
+                    any = true;
+                } else if (ed->currentKind() == CodeEditor::KindForm && ed->saveForm()) {
+                    appendOutput("Saved form code: " + ed->currentFilePath(), "#22c55e");
+                    any = true;
+                }
+            }
+            if (cv && !cv->currentFormPath().isEmpty()) {
+                if (cv->saveForm()) {
+                    appendOutput("Saved form: " + cv->currentFormPath(), "#22c55e");
+                    any = true;
+                }
             }
         }
+
         if (!any) statusBar()->showMessage("Nothing to save.", 2000);
     }, QKeySequence::Save);
     fileMenu->addSeparator();
@@ -364,25 +384,20 @@ void MainWindow::onNewSheet() {
 }
 
 void MainWindow::onFormActivated(const QString &absPath) {
-    // 1. Load the form into the canvas.
+    // 1. Load the form into the canvas (UI + widgets + code).
     if (!m_central->formCanvas()->loadForm(absPath)) {
         appendOutput("Failed to read form: " + absPath, "#ef4444");
         return;
     }
     appendOutput("Open form: " + absPath, "#a3e635");
 
-    // 2. Find the activity (.aba) sitting next to the form and load its
-    //    code into the editor.  Per spec, code is at the activity level —
-    //    forms are pure UI definitions.
-    QDir formDir(QFileInfo(absPath).absolutePath());
-    QStringList abas = formDir.entryList(QStringList() << "*.aba", QDir::Files);
-    if (!abas.isEmpty()) {
-        QString abaPath = formDir.absoluteFilePath(abas.first());
-        if (m_central->codeEditor()->loadActivity(abaPath))
-            appendOutput("Loaded code: " + abaPath, "#5b8cff");
-    }
+    // 2. Load the FORM's own event-driven code into the editor.
+    //    (The activity's Sub Main lives in the .aba and is shown when the
+    //    user opens the activity itself.)
+    if (m_central->codeEditor()->loadForm(absPath))
+        appendOutput("Loaded form code: " + absPath, "#5b8cff");
 
-    // 3. Switch to Design mode (user can hit EDIT to see the code).
+    // 3. Switch to Design mode (user can hit EDIT to see the form's code).
     m_tabBar->setCurrentMode(FancyTabBar::ModeDesign);
     m_central->showPage(CentralStack::PageDesigner);
 }

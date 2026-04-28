@@ -59,6 +59,12 @@ public:
 
     QSize sizeHint() const override;
 
+    // Form-level event-driven code (Form_Load, btnX_Click, ...) — lives in
+    // the .frm file alongside the widgets.  The CodeEditor edits this string
+    // when in "Form mode" and pushes back via setCode() before save.
+    QString code() const { return m_code; }
+    void    setCode(const QString &c) { m_code = c; emit modified(); }
+
 signals:
     void selectionChanged(QWidget *w);
     void modified();
@@ -93,6 +99,7 @@ private:
     QString m_path;
     QString m_id;
     QString m_title;
+    QString m_code;
     int     m_formW { 640 };
     int     m_formH { 480 };
 

@@ -477,7 +477,7 @@ void FormCanvas::cleanupAllWidgets() {
 
 void FormCanvas::clearForm() {
     cleanupAllWidgets();
-    m_path.clear(); m_id.clear(); m_title.clear();
+    m_path.clear(); m_id.clear(); m_title.clear(); m_code.clear();
     m_formW = 640; m_formH = 480;
     layoutBody();
     update();
@@ -491,7 +491,7 @@ bool FormCanvas::loadForm(const QString &filePath) {
     }
     cleanupAllWidgets();
     m_path = filePath;
-    m_id.clear(); m_title.clear();
+    m_id.clear(); m_title.clear(); m_code.clear();
     m_formW = 640; m_formH = 480;
 
     QXmlStreamReader r(&f);
@@ -513,6 +513,8 @@ bool FormCanvas::loadForm(const QString &filePath) {
                 if (a.hasAttribute("height")) m_formH = a.value("height").toInt();
             } else if (n == "Title") {
                 m_title = r.readElementText();
+            } else if (n == "Code") {
+                m_code = r.readElementText();
             } else if (n == "Widget") {
                 inWidget = true; cText.clear();
                 const auto a = r.attributes();
@@ -595,6 +597,11 @@ bool FormCanvas::saveForm() {
         }
         w.writeEndElement();
     }
+    w.writeEndElement();
+
+    // Form-level event-driven code (Form_Load, btnX_Click, ...)
+    w.writeStartElement("Code");
+    w.writeCDATA(m_code);
     w.writeEndElement();
 
     w.writeEndElement(); // Form
