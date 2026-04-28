@@ -15,6 +15,7 @@
 #include "Ast.h"
 #include "Value.h"
 #include "Environment.h"
+#include "EntityStore.h"
 #include <QHash>
 #include <QString>
 #include <functional>
@@ -55,6 +56,17 @@ public:
     // Access the global environment (used by FormRunner to bind widgets).
     std::shared_ptr<Environment> globals() const { return m_globals; }
 
+    // Sheets / entities
+    EntityStore *entityStore() { return &m_store; }
+    void         registerSheet(const SheetSchema &schema);
+
+    // Resolves a member access:  obj.prop  →  Value
+    // Used by the parser-level MemberExpr and by member assignment.
+    Value getMember(const Value &obj, const QString &prop);
+    void  setMember(const Value &obj, const QString &prop, const Value &v);
+    Value callMember(const Value &obj, const QString &name,
+                     const QVector<Value> &args);
+
 private:
     // Statement execution ─────────────────────────────────────────────
     void execStmt (Stmt *s, std::shared_ptr<Environment> env);
@@ -78,6 +90,7 @@ private:
     std::shared_ptr<Environment>    m_globals;
     QHash<QString, SubPtr>          m_subs;          // case-insensitive (toLower)
     QHash<QString, BuiltinFn>       m_builtins;
+    EntityStore                     m_store;
 
     OutputCallback m_output;
     OutputCallback m_errorOut;

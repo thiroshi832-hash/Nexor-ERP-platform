@@ -24,6 +24,7 @@ public:
         NodeGroupResources,
         NodeActivity,
         NodeForm,
+        NodeSheet,
         NodeGenericLeaf
     };
 
@@ -42,6 +43,7 @@ signals:
     void requestInsertResources();
     void formActivated(const QString &absoluteFormPath);
     void activityActivated(const QString &absoluteActivityPath);
+    void sheetActivated(const QString &absoluteSheetPath);
 
 private slots:
     void onContextMenu(const QPoint &p);
@@ -50,6 +52,7 @@ private slots:
 private:
     QTreeWidgetItem *addGroup(QTreeWidgetItem *parent, const QString &label, NodeKind kind);
     void rebuildAtomicActivities(QTreeWidgetItem *group);
+    void rebuildSheets(QTreeWidgetItem *group);
     void rebuildList(QTreeWidgetItem *group, const QStringList &items);
 
     Project *m_project { nullptr };

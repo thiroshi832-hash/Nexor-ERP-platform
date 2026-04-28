@@ -21,6 +21,9 @@
 #include "project/ProjectTree.h"
 #include "dialogs/NewProjectDialog.h"
 #include "dialogs/NewActivityDialog.h"
+#include "dialogs/NewSheetDialog.h"
+#include "sheet/SheetEditor.h"
+#include "project/Sheet.h"
 
 #include <QFileInfo>
 #include <QDir>
@@ -166,6 +169,8 @@ void MainWindow::setupUi() {
             this, &MainWindow::onFormActivated);
     connect(m_projectTree, &ProjectTree::activityActivated,
             this, &MainWindow::onActivityActivated);
+    connect(m_projectTree, &ProjectTree::sheetActivated,
+            this, &MainWindow::onSheetActivated);
 
     // PropertyPanel "+ generate handler" button → insert stub into the form
     // code (in the editor if it's already showing this form's code; in the
@@ -371,6 +376,7 @@ void MainWindow::buildMenus() {
         nx::NexorRuntime rt;
         rt.setOutput([this](const QString &line) { appendOutput(line, "#dce1e7"); });
         rt.setError ([this](const QString &err)  { appendOutput("ERROR: " + err, "#ef4444"); });
+        rt.registerProjectSheets(m_project.get());
         if (!rt.compile(src, unit)) {
             appendOutput("Compile error: " + rt.lastError(), "#ef4444");
             return;
@@ -513,8 +519,33 @@ void MainWindow::onNewProcessActivity() {
 }
 
 void MainWindow::onNewSheet() {
-    QMessageBox::information(this, "New Sheet",
-        "Sheets will land in feature/sheets.");
+    if (!m_project) {
+        QMessageBox::information(this, "New Sheet",
+            "Open or create a project first.");
+        return;
+    }
+    NewSheetDialog dlg(this);
+    if (dlg.exec() != QDialog::Accepted) return;
+    QString err;
+    auto sht = m_project->createSheet(dlg.meta(), &err);
+    if (!sht) {
+        QMessageBox::warning(this, "New Sheet", err);
+        return;
+    }
+    m_projectTree->refresh();
+    appendOutput(QString("Created sheet '%1' at %2")
+                    .arg(sht->meta().title, sht->filePath()), "#22c55e");
+    onSheetActivated(sht->filePath());
+}
+
+void MainWindow::onSheetActivated(const QString &absPath) {
+    if (!m_central->sheetEditor()->loadSheet(absPath)) {
+        appendOutput("Failed to read sheet: " + absPath, "#ef4444");
+        return;
+    }
+    appendOutput("Open sheet: " + absPath, "#fbbf24");
+    m_central->showPage(CentralStack::PageSheet);
+    m_tabBar->setCurrentMode(FancyTabBar::ModeEdit);
 }
 
 void MainWindow::onFormActivated(const QString &absPath) {

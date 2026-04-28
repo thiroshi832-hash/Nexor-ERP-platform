@@ -12,6 +12,30 @@ Interpreter::Interpreter()
     installBuiltins();
 }
 
+void Interpreter::registerSheet(const SheetSchema &schema) {
+    m_store.registerSheet(schema);
+}
+
+// Pulls the sheet handle for a name, if registered.
+static Value makeSheetRefValue(const QString &id, EntityStore *store) {
+    auto ref = std::make_shared<SheetRef>();
+    ref->sheetId = id;
+    ref->store   = store;
+    return Value::object(ref, "Sheet");
+}
+
+static std::shared_ptr<Entity> entityHandle(const Value &v) {
+    if (v.kind() != Value::Object) return nullptr;
+    if (v.objectKind() != "Entity") return nullptr;
+    return std::static_pointer_cast<Entity>(v.objectHandle());
+}
+
+static std::shared_ptr<SheetRef> sheetHandle(const Value &v) {
+    if (v.kind() != Value::Object) return nullptr;
+    if (v.objectKind() != "Sheet") return nullptr;
+    return std::static_pointer_cast<SheetRef>(v.objectHandle());
+}
+
 // ─── Load a parsed Program ───────────────────────────────────────────────
 bool Interpreter::load(const Program &p, const QString &unitName) {
     m_currentUnit = unitName;
@@ -100,6 +124,13 @@ void Interpreter::execStmt(Stmt *s, std::shared_ptr<Environment> env) {
         env->assign(a->name, v);
         return;
     }
+    case Stmt::MemberAssignStmt: {
+        auto *m = static_cast<MemberAssignStatement*>(s);
+        Value obj = evalExpr(m->object.get(), env);
+        Value v   = evalExpr(m->value.get(),  env);
+        setMember(obj, m->property, v);
+        return;
+    }
     case Stmt::IfStmt: {
         auto *is = static_cast<IfStatement*>(s);
         for (const auto &b : is->branches) {
@@ -153,6 +184,24 @@ void Interpreter::execStmt(Stmt *s, std::shared_ptr<Environment> env) {
         }
         return;
     }
+    case Stmt::ForEachStmt: {
+        auto *f = static_cast<ForEachStatement*>(s);
+        Value coll = evalExpr(f->collection.get(), env);
+        if (coll.kind() != Value::List) {
+            // Not a list — silently no-op.  Future: iterate dict keys, etc.
+            return;
+        }
+        env->define(f->var, Value());
+        try {
+            for (const auto &item : coll.listRef()) {
+                env->assign(f->var, item);
+                execBlock(f->body, env);
+            }
+        } catch (const ExitSignal &x) {
+            if (x.what != ExitStatement::ExitFor) throw;
+        }
+        return;
+    }
     case Stmt::ReturnStmt: {
         auto *r = static_cast<ReturnStatement*>(s);
         throw ReturnSignal{ r->value ? evalExpr(r->value.get(), env) : Value() };
@@ -182,11 +231,15 @@ Value Interpreter::evalExpr(Expr *e, std::shared_ptr<Environment> env) {
     case Expr::Literal:  return static_cast<LiteralExpr*>(e)->value;
     case Expr::Variable: {
         auto *v = static_cast<VariableExpr*>(e);
-        // A bare identifier without parens may be a no-arg sub call (VB style).
         QString lo = v->name.toLower();
-        if (m_subs.contains(lo)) return call(v->name, {});
-        if (m_builtins.contains(lo)) return m_builtins.value(lo)(*this, {});
+        // 1. Local / global variable wins.
         if (env->has(v->name)) return env->get(v->name);
+        // 2. Registered sheet name (Customer, Order, …) → SheetRef value.
+        if (m_store.hasSheet(v->name)) return makeSheetRefValue(v->name, &m_store);
+        // 3. No-arg user-defined sub.
+        if (m_subs.contains(lo))     return call(v->name, {});
+        // 4. No-arg built-in.
+        if (m_builtins.contains(lo)) return m_builtins.value(lo)(*this, {});
         return Value();             // implicitly empty
     }
     case Expr::Unary:    return evalUnary  (static_cast<UnaryExpr*>  (e), env);
@@ -194,15 +247,96 @@ Value Interpreter::evalExpr(Expr *e, std::shared_ptr<Environment> env) {
     case Expr::Logical:  return evalLogical(static_cast<LogicalExpr*>(e), env);
     case Expr::Call:     return evalCall   (static_cast<CallExpr*>   (e), env);
     case Expr::Member: {
-        // Reserved for future entity / form member access.  Returns Empty
-        // for now so user code referencing form properties doesn't crash.
-        return Value();
+        auto *m = static_cast<MemberExpr*>(e);
+        Value obj = evalExpr(m->object.get(), env);
+        return getMember(obj, m->property);
     }
     }
     return Value();
 }
 
+// ─── Member access + sheet/entity methods ───────────────────────────────
+Value Interpreter::getMember(const Value &obj, const QString &prop) {
+    // Entity field access
+    if (auto e = entityHandle(obj)) {
+        return e->get(prop);
+    }
+    // Sheet method-as-property doesn't make sense; user must call .New()/etc.
+    return Value();
+}
+
+void Interpreter::setMember(const Value &obj, const QString &prop, const Value &v) {
+    if (auto e = entityHandle(obj)) {
+        e->set(prop, v);
+        return;
+    }
+    // Silently ignore for now.
+}
+
+Value Interpreter::callMember(const Value &obj, const QString &name,
+                              const QVector<Value> &args) {
+    QString lo = name.toLower();
+
+    // ── Sheet methods: New / Find / All / Count / Delete
+    if (auto sr = sheetHandle(obj)) {
+        EntityTable *t = sr->store ? sr->store->table(sr->sheetId) : nullptr;
+        if (!t) return Value();
+
+        if (lo == "new") {
+            auto ent = t->create();
+            return Value::object(ent, "Entity");
+        }
+        if (lo == "find") {
+            qint64 id = args.isEmpty() ? 0 : args.first().toLong();
+            auto ent = t->find(id);
+            if (!ent) return Value::nothing();
+            return Value::object(ent, "Entity");
+        }
+        if (lo == "all") {
+            QVector<Value> rows;
+            for (const auto &e : t->all())
+                rows.append(Value::object(e, "Entity"));
+            return Value::list(std::move(rows));
+        }
+        if (lo == "count") {
+            return Value::integer(t->all().size());
+        }
+        if (lo == "delete") {
+            qint64 id = args.isEmpty() ? 0 : args.first().toLong();
+            return Value::boolean(t->remove(id));
+        }
+        return Value();
+    }
+
+    // ── Entity methods: Save / Delete
+    if (auto e = entityHandle(obj)) {
+        EntityTable *t = m_store.table(e->sheetId());
+        if (!t) return Value();
+        if (lo == "save")   { return Value::boolean(t->save(e)); }
+        if (lo == "delete") { return Value::boolean(t->remove(e->id())); }
+        // Otherwise treat as a property read (e.g., user wrote   e.Name())
+        return e->get(name);
+    }
+    return Value();
+}
+
 Value Interpreter::evalCall(CallExpr *c, std::shared_ptr<Environment> env) {
+    // Special-case: parser-synthesised "@member" call → obj.method(args).
+    if (c->name == "@member" && !c->args.isEmpty()) {
+        // First "arg" is actually the MemberExpr receiver carrying the
+        // property name.  Evaluate the underlying object, then dispatch.
+        ExprPtr recvExpr = c->args.first();
+        if (recvExpr && recvExpr->kind == Expr::Member) {
+            auto *me = static_cast<MemberExpr*>(recvExpr.get());
+            Value obj = evalExpr(me->object.get(), env);
+            QVector<Value> args;
+            args.reserve(c->args.size() - 1);
+            for (int i = 1; i < c->args.size(); ++i)
+                args.append(evalExpr(c->args[i].get(), env));
+            return callMember(obj, me->property, args);
+        }
+    }
+
     QVector<Value> args;
     args.reserve(c->args.size());
     for (const auto &a : c->args) args.append(evalExpr(a.get(), env));

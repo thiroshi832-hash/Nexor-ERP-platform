@@ -102,9 +102,11 @@ public:
         ExprStmt,
         DimStmt,
         AssignStmt,
+        MemberAssignStmt,
         IfStmt,
         WhileStmt,
         ForStmt,
+        ForEachStmt,
         ReturnStmt,
         ExitStmt,
         PrintStmt,
@@ -140,6 +142,17 @@ public:
     ExprPtr value;
 };
 
+// Property assignment:  obj.field = value
+class MemberAssignStatement : public Stmt {
+public:
+    MemberAssignStatement(int line, ExprPtr obj, QString prop, ExprPtr v)
+        : Stmt(MemberAssignStmt, line), object(std::move(obj)),
+          property(std::move(prop)), value(std::move(v)) {}
+    ExprPtr object;
+    QString property;
+    ExprPtr value;
+};
+
 class BlockStatement : public Stmt {
 public:
     BlockStatement(int line, QVector<StmtPtr> ss)
@@ -170,6 +183,15 @@ public:
     ExprPtr          start;
     ExprPtr          end;
     ExprPtr          step;        // optional; default = 1
+    QVector<StmtPtr> body;
+};
+
+// For Each <var> In <collection> ... Next
+class ForEachStatement : public Stmt {
+public:
+    ForEachStatement(int line) : Stmt(ForEachStmt, line) {}
+    QString          var;
+    ExprPtr          collection;
     QVector<StmtPtr> body;
 };
 

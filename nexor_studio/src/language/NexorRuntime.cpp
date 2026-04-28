@@ -1,6 +1,8 @@
 #include "NexorRuntime.h"
 #include "Lexer.h"
 #include "Parser.h"
+#include "project/Project.h"
+#include "project/Sheet.h"
 
 namespace nx {
 
@@ -32,6 +34,24 @@ Value NexorRuntime::call(const QString &name, const QVector<Value> &args) {
 
 bool NexorRuntime::hasSub(const QString &name) const {
     return m_interp->hasSub(name);
+}
+
+void NexorRuntime::registerProjectSheets(const Project *project) {
+    if (!project) return;
+    for (const auto &sht : project->sheets()) {
+        nx::SheetSchema s;
+        s.sheetId = sht->meta().id;
+        for (const FieldSpec &fs : sht->fields()) {
+            nx::SheetSchemaField rf;
+            rf.name        = fs.name;
+            rf.type        = fs.type;
+            rf.isKey       = fs.isKey;
+            rf.required    = fs.required;
+            rf.defaultText = fs.defaultText;
+            s.fields.append(rf);
+        }
+        m_interp->registerSheet(s);
+    }
 }
 
 } // namespace nx

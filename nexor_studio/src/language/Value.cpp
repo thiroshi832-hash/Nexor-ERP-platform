@@ -11,6 +11,15 @@ Value Value::real   (double d)            { Value v; v.m_kind = Double; v.m_d = 
 Value Value::text   (const QString &s)    { Value v; v.m_kind = String; v.m_s = s;          return v; }
 Value Value::nothing()                    { return Value(); }
 
+Value Value::object(std::shared_ptr<void> obj, const QString &kindTag) {
+    Value v; v.m_kind = Object; v.m_obj = std::move(obj); v.m_objectKind = kindTag;
+    return v;
+}
+Value Value::list(QVector<Value> items) {
+    Value v; v.m_kind = List; v.m_list = std::move(items);
+    return v;
+}
+
 bool Value::toBool() const {
     switch (m_kind) {
     case Empty:  return false;
@@ -19,6 +28,8 @@ bool Value::toBool() const {
     case Double: return m_d != 0;
     case String: return !m_s.isEmpty() && m_s.compare("false", Qt::CaseInsensitive) != 0
                                        && m_s.compare("0",     Qt::CaseInsensitive) != 0;
+    case Object: return m_obj != nullptr;
+    case List:   return !m_list.isEmpty();
     }
     return false;
 }
@@ -56,6 +67,8 @@ QString Value::toText() const {
         return s;
     }
     case String: return m_s;
+    case Object: return QString("<%1>").arg(m_objectKind.isEmpty() ? "Object" : m_objectKind);
+    case List:   return QString("<List of %1>").arg(m_list.size());
     }
     return "";
 }

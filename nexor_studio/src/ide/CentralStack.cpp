@@ -5,6 +5,7 @@
 #include "editor/EditorView.h"
 #include "designer/DesignerView.h"
 #include "designer/FormCanvas.h"
+#include "sheet/SheetEditor.h"
 
 #include <QLabel>
 #include <QVBoxLayout>
@@ -33,10 +34,12 @@ CentralStack::CentralStack(QWidget *parent) : QStackedWidget(parent) {
     m_welcome      = new WelcomePage;
     m_editorView   = new EditorView;
     m_designerView = new DesignerView;
+    m_sheetEditor  = new SheetEditor;
 
     addWidget(m_welcome);        // PageWelcome
     addWidget(m_editorView);     // PageEditor
     addWidget(m_designerView);   // PageDesigner
+    addWidget(m_sheetEditor);    // PageSheet
     addWidget(placeholder("BUILD",
         "Compilation output will appear here.\n"
         "Compiler lands in feature/language-compiler."));

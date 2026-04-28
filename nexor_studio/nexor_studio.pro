@@ -30,10 +30,14 @@ SOURCES += \
     src/language/NexorRuntime.cpp \
     src/project/Project.cpp \
     src/project/Activity.cpp \
+    src/project/Sheet.cpp \
     src/project/ProjectTree.cpp \
+    src/sheet/SheetEditor.cpp \
     src/dialogs/NewProjectDialog.cpp \
     src/dialogs/NewActivityDialog.cpp \
-    src/dialogs/TabOrderDialog.cpp
+    src/dialogs/NewSheetDialog.cpp \
+    src/dialogs/TabOrderDialog.cpp \
+    src/language/EntityStore.cpp
 
 HEADERS += \
     src/ide/MainWindow.h \
@@ -60,10 +64,14 @@ HEADERS += \
     src/language/NexorRuntime.h \
     src/project/Project.h \
     src/project/Activity.h \
+    src/project/Sheet.h \
     src/project/ProjectTree.h \
+    src/sheet/SheetEditor.h \
     src/dialogs/NewProjectDialog.h \
     src/dialogs/NewActivityDialog.h \
-    src/dialogs/TabOrderDialog.h
+    src/dialogs/NewSheetDialog.h \
+    src/dialogs/TabOrderDialog.h \
+    src/language/EntityStore.h
 
 DESTDIR     = $$PWD/../bin
 OBJECTS_DIR = $$PWD/build/obj

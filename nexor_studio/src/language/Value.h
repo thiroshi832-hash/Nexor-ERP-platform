@@ -7,12 +7,17 @@
 
 #include <QString>
 #include <QVariant>
+#include <QVector>
+#include <memory>
 
 namespace nx {
 
+class Entity;     // forward — defined in EntityStore.h
+class SheetRef;   // forward — defined in EntityStore.h
+
 class Value {
 public:
-    enum Kind { Empty, Bool, Long, Double, String };
+    enum Kind { Empty, Bool, Long, Double, String, Object, List };
 
     Value();                                  // Empty
     static Value boolean(bool b);
@@ -20,6 +25,15 @@ public:
     static Value real(double d);
     static Value text(const QString &s);
     static Value nothing();                   // alias for Empty
+
+    // Object & list variants for the entity layer.
+    static Value object(std::shared_ptr<void> obj, const QString &kindTag);
+    static Value list(QVector<Value> items);
+
+    QString objectKind() const { return m_objectKind; }
+    std::shared_ptr<void> objectHandle() const { return m_obj; }
+    QVector<Value>      &listRef()           { return m_list; }
+    const QVector<Value> &listRef() const    { return m_list; }
 
     Kind     kind()    const { return m_kind; }
     bool     isEmpty() const { return m_kind == Empty; }
@@ -47,6 +61,9 @@ private:
     qint64   m_i    { 0 };
     double   m_d    { 0 };
     QString  m_s;
+    std::shared_ptr<void> m_obj;        // for Object
+    QString               m_objectKind; // tag like "Entity" / "Sheet"
+    QVector<Value>        m_list;       // for List
 };
 
 } // namespace nx
