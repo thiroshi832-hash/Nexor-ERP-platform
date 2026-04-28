@@ -251,8 +251,84 @@ Value Interpreter::evalExpr(Expr *e, std::shared_ptr<Environment> env) {
         Value obj = evalExpr(m->object.get(), env);
         return getMember(obj, m->property);
     }
+    case Expr::Query:
+        return evalQuery(static_cast<QueryExpr*>(e), env);
     }
     return Value();
+}
+
+// ─── Query (LINQ-style) ─────────────────────────────────────────────────
+//
+// Evaluation strategy is straightforward in-memory: pull the source into a
+// list, run Where as a filter, sort by OrderBy keys, project via Select,
+// then apply Take.  The optimiser that pushes filters into SQL will land
+// in Phase 5b once we have more demanding workloads.
+Value Interpreter::evalQuery(QueryExpr *q, std::shared_ptr<Environment> env) {
+    Value src = evalExpr(q->source.get(), env);
+
+    // Expand a SheetRef source automatically into the full list of rows.
+    if (src.kind() == Value::Object && src.objectKind() == "Sheet") {
+        src = callMember(src, "All", {});
+    }
+    if (src.kind() != Value::List) {
+        return Value::list({});      // not iterable
+    }
+
+    QVector<Value> all = src.listRef();
+
+    // 1. Where ───────────────────────────────────────────────────────────
+    QVector<Value> filtered;
+    filtered.reserve(all.size());
+    for (const Value &item : all) {
+        auto child = std::make_shared<Environment>(env);
+        child->define(q->sourceVar, item);
+        if (q->whereExpr) {
+            Value c = evalExpr(q->whereExpr.get(), child);
+            if (!c.toBool()) continue;
+        }
+        filtered.append(item);
+    }
+
+    // 2. OrderBy ─────────────────────────────────────────────────────────
+    if (!q->orderBy.isEmpty()) {
+        // Stable sort with successive keys — but std::sort isn't guaranteed
+        // stable; use std::stable_sort.
+        std::stable_sort(filtered.begin(), filtered.end(),
+            [&](const Value &a, const Value &b) {
+                for (const auto &c : q->orderBy) {
+                    auto envA = std::make_shared<Environment>(env);
+                    envA->define(q->sourceVar, a);
+                    auto envB = std::make_shared<Environment>(env);
+                    envB->define(q->sourceVar, b);
+                    Value va = evalExpr(c.expr.get(), envA);
+                    Value vb = evalExpr(c.expr.get(), envB);
+                    int cmp = Value::compare(va, vb);
+                    if (cmp != 0) return c.descending ? cmp > 0 : cmp < 0;
+                }
+                return false;
+            });
+    }
+
+    // 3. Take ────────────────────────────────────────────────────────────
+    if (q->takeExpr) {
+        Value tv = evalExpr(q->takeExpr.get(), env);
+        qint64 n = tv.toLong();
+        if (n < 0) n = 0;
+        if (n < filtered.size()) filtered.resize(int(n));
+    }
+
+    // 4. Select ──────────────────────────────────────────────────────────
+    if (q->selectExpr) {
+        QVector<Value> projected;
+        projected.reserve(filtered.size());
+        for (const Value &item : filtered) {
+            auto child = std::make_shared<Environment>(env);
+            child->define(q->sourceVar, item);
+            projected.append(evalExpr(q->selectExpr.get(), child));
+        }
+        return Value::list(std::move(projected));
+    }
+    return Value::list(std::move(filtered));
 }
 
 // ─── Member access + sheet/entity methods ───────────────────────────────

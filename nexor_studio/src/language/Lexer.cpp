@@ -40,6 +40,13 @@ void Lexer::initKeywords() {
         { "true",     TokKind::True     },
         { "false",    TokKind::False    },
         { "nothing",  TokKind::Nothing  },
+        { "from",       TokKind::From       },
+        { "where",      TokKind::Where      },
+        { "orderby",    TokKind::OrderBy    },
+        { "select",     TokKind::Select     },
+        { "take",       TokKind::Take       },
+        { "ascending",  TokKind::Ascending  },
+        { "descending", TokKind::Descending },
     };
 }
 
@@ -268,6 +275,13 @@ QString Token::kindName(TokKind k) {
     case TokKind::Call:      return "Call";
     case TokKind::Public:    return "Public";
     case TokKind::Private:   return "Private";
+    case TokKind::From:        return "From";
+    case TokKind::Where:       return "Where";
+    case TokKind::OrderBy:     return "OrderBy";
+    case TokKind::Select:      return "Select";
+    case TokKind::Take:        return "Take";
+    case TokKind::Ascending:   return "Ascending";
+    case TokKind::Descending:  return "Descending";
     case TokKind::Plus:      return "+";
     case TokKind::Minus:     return "-";
     case TokKind::Star:      return "*";

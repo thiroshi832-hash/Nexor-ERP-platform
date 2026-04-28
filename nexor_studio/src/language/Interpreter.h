@@ -78,6 +78,7 @@ private:
     Value evalBinary (BinaryExpr  *b, std::shared_ptr<Environment> env);
     Value evalLogical(LogicalExpr *l, std::shared_ptr<Environment> env);
     Value evalUnary  (UnaryExpr   *u, std::shared_ptr<Environment> env);
+    Value evalQuery  (class QueryExpr *q, std::shared_ptr<Environment> env);
 
     // Throws a runtime error (caught at top-level call()).
     [[noreturn]] void runtimeError(int line, const QString &msg);

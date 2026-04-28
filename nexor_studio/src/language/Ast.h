@@ -32,7 +32,8 @@ public:
         Binary,
         Logical,
         Call,
-        Member,         // a.b   (reserved for future entity support)
+        Member,         // a.b
+        Query,          // From ... Where ... OrderBy ... Select ... Take ...
     };
 
     explicit Expr(Kind k, int line) : kind(k), line(line) {}
@@ -91,6 +92,32 @@ public:
         : Expr(Member, line), object(std::move(obj)), property(std::move(prop)) {}
     ExprPtr object;
     QString property;
+};
+
+// LINQ-style query expression:
+//
+//   From <var> In <source>
+//       [ Where <predicate> ]
+//       [ OrderBy <key> [Ascending|Descending] [, ...] ]
+//       [ Select <projection> ]
+//       [ Take <count> ]
+class QueryExpr : public Expr {
+public:
+    QueryExpr(int line) : Expr(Query, line) {}
+
+    QString sourceVar;     // the binding (e.g., "c" in From c In ...)
+    ExprPtr source;        // an expression evaluating to a list / sheet
+
+    ExprPtr whereExpr;     // optional
+
+    struct OrderByClause {
+        ExprPtr expr;
+        bool    descending { false };
+    };
+    QVector<OrderByClause> orderBy;
+
+    ExprPtr selectExpr;    // optional; defaults to the binding variable
+    ExprPtr takeExpr;      // optional Long
 };
 
 // =============================================================================

@@ -75,6 +75,7 @@ private:
 
     // ── Expressions (precedence climb)
     ExprPtr parseExpr();
+    ExprPtr parseQuery();      // From ... In ... clauses
     ExprPtr parseOr();
     ExprPtr parseAnd();
     ExprPtr parseNot();

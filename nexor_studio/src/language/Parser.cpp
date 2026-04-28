@@ -284,7 +284,50 @@ StmtPtr Parser::parseExit() {
 }
 
 // ── Expressions ──────────────────────────────────────────────────────────
-ExprPtr Parser::parseExpr()   { return parseOr(); }
+ExprPtr Parser::parseExpr() {
+    if (check(TokKind::From)) return parseQuery();
+    return parseOr();
+}
+
+ExprPtr Parser::parseQuery() {
+    int line = peek().line;
+    advance();                                  // consume From
+
+    Token name = expect(TokKind::Ident, "query variable name");
+
+    // 'In' is not a reserved keyword (kept that way so simple identifiers
+    // don't break) — accept it as an identifier here.
+    if (check(TokKind::Ident) && peek().lexeme.compare("In", Qt::CaseInsensitive) == 0) {
+        advance();
+    } else {
+        errorAt(peek(), "expected 'In' after From <var>");
+    }
+
+    auto q = std::make_shared<QueryExpr>(line);
+    q->sourceVar = name.lexeme;
+    q->source    = parseOr();                   // not parseExpr → no nested queries
+
+    while (true) {
+        if (match(TokKind::Where)) {
+            q->whereExpr = parseOr();
+        } else if (match(TokKind::OrderBy)) {
+            do {
+                QueryExpr::OrderByClause c;
+                c.expr = parseOr();
+                if      (match(TokKind::Descending)) c.descending = true;
+                else if (match(TokKind::Ascending))  c.descending = false;
+                q->orderBy.append(c);
+            } while (match(TokKind::Comma));
+        } else if (match(TokKind::Select)) {
+            q->selectExpr = parseOr();
+        } else if (match(TokKind::Take)) {
+            q->takeExpr = parseOr();
+        } else {
+            break;
+        }
+    }
+    return q;
+}
 
 ExprPtr Parser::parseOr() {
     ExprPtr l = parseAnd();
