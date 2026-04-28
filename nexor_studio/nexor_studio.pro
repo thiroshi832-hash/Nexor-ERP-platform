@@ -23,6 +23,7 @@ SOURCES += \
     src/designer/DesignerView.cpp \
     src/runtime/FormRunner.cpp \
     src/runtime/WidgetValue.cpp \
+    src/runtime/ProcessEngine.cpp \
     src/language/Lexer.cpp \
     src/language/Parser.cpp \
     src/language/Value.cpp \
@@ -32,11 +33,14 @@ SOURCES += \
     src/project/Project.cpp \
     src/project/Activity.cpp \
     src/project/Sheet.cpp \
+    src/project/Process.cpp \
     src/project/ProjectTree.cpp \
     src/sheet/SheetEditor.cpp \
+    src/process/ProcessEditor.cpp \
     src/dialogs/NewProjectDialog.cpp \
     src/dialogs/NewActivityDialog.cpp \
     src/dialogs/NewSheetDialog.cpp \
+    src/dialogs/NewProcessDialog.cpp \
     src/dialogs/TabOrderDialog.cpp \
     src/language/EntityStore.cpp
 
@@ -56,6 +60,7 @@ HEADERS += \
     src/designer/DesignerView.h \
     src/runtime/FormRunner.h \
     src/runtime/WidgetValue.h \
+    src/runtime/ProcessEngine.h \
     src/language/Token.h \
     src/language/Lexer.h \
     src/language/Ast.h \
@@ -67,11 +72,14 @@ HEADERS += \
     src/project/Project.h \
     src/project/Activity.h \
     src/project/Sheet.h \
+    src/project/Process.h \
     src/project/ProjectTree.h \
     src/sheet/SheetEditor.h \
+    src/process/ProcessEditor.h \
     src/dialogs/NewProjectDialog.h \
     src/dialogs/NewActivityDialog.h \
     src/dialogs/NewSheetDialog.h \
+    src/dialogs/NewProcessDialog.h \
     src/dialogs/TabOrderDialog.h \
     src/language/EntityStore.h
 

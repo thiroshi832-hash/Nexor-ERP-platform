@@ -57,6 +57,8 @@ private slots:
     void onFormActivated(const QString &absPath);
     void onActivityActivated(const QString &absPath);
     void onSheetActivated(const QString &absPath);
+    void onProcessActivated(const QString &absPath);
+    void onRunProcessRequested(const QString &absPath);
 
 private:
     void setupUi();

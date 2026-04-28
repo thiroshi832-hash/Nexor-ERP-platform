@@ -12,11 +12,12 @@ class EditorView;
 class FormCanvas;
 class DesignerView;
 class SheetEditor;
+class ProcessEditor;
 
 class CentralStack : public QStackedWidget {
     Q_OBJECT
 public:
-    enum Page { PageWelcome = 0, PageEditor, PageDesigner, PageSheet, PageBuild, PageDebug };
+    enum Page { PageWelcome = 0, PageEditor, PageDesigner, PageSheet, PageProcess, PageBuild, PageDebug };
 
     explicit CentralStack(QWidget *parent = nullptr);
 
@@ -26,6 +27,7 @@ public:
     DesignerView *designerView() const { return m_designerView; }
     FormCanvas   *formCanvas()   const;
     SheetEditor  *sheetEditor()  const { return m_sheetEditor; }
+    ProcessEditor *processEditor() const { return m_processEditor; }
 
     void showPage(Page p) { setCurrentIndex(p); }
 
@@ -34,6 +36,7 @@ private:
     EditorView   *m_editorView   { nullptr };
     DesignerView *m_designerView { nullptr };
     SheetEditor  *m_sheetEditor  { nullptr };
+    ProcessEditor *m_processEditor { nullptr };
 };
 
 #endif // NEXOR_STUDIO_CENTRALSTACK_H
