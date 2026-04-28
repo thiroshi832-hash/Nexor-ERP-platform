@@ -22,6 +22,12 @@ SOURCES += \
     src/designer/WidgetPalette.cpp \
     src/designer/DesignerView.cpp \
     src/runtime/FormRunner.cpp \
+    src/language/Lexer.cpp \
+    src/language/Parser.cpp \
+    src/language/Value.cpp \
+    src/language/Environment.cpp \
+    src/language/Interpreter.cpp \
+    src/language/NexorRuntime.cpp \
     src/project/Project.cpp \
     src/project/Activity.cpp \
     src/project/ProjectTree.cpp \
@@ -44,6 +50,14 @@ HEADERS += \
     src/designer/WidgetPalette.h \
     src/designer/DesignerView.h \
     src/runtime/FormRunner.h \
+    src/language/Token.h \
+    src/language/Lexer.h \
+    src/language/Ast.h \
+    src/language/Parser.h \
+    src/language/Value.h \
+    src/language/Environment.h \
+    src/language/Interpreter.h \
+    src/language/NexorRuntime.h \
     src/project/Project.h \
     src/project/Activity.h \
     src/project/ProjectTree.h \
