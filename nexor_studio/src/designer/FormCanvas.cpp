@@ -148,16 +148,13 @@ void FormCanvas::resizeEvent(QResizeEvent *) {
 
 // ─── Painting (chrome only — widgets paint themselves) ──────────────────
 //
-// Faithful Windows 9x form look:
-//   - 1-px raised 3D bezel surrounding the entire form
-//   - Solid #000080-ish title bar (no gradient — Win95 default)
-//   - System-menu glyph at left, Min/Max/Close raised buttons at right
-//   - No footer status bar (status lives in the IDE shell, not the form)
+// Title-bar-less designer view: just the workspace background and a 2-px
+// raised 3D bezel around the form body.  The body itself (FormBody) paints
+// its own background + dot grid.
 //
 void FormCanvas::paintEvent(QPaintEvent *) {
     QPainter p(this);
-    // VB6 MDI workspace gray.
-    p.fillRect(rect(), QColor(0x80, 0x80, 0x80));
+    p.fillRect(rect(), QColor(0x80, 0x80, 0x80));      // VB6 workspace gray
 
     if (m_path.isEmpty()) {
         p.setPen(QColor(0xd0, 0xd0, 0xd0));
@@ -168,11 +165,11 @@ void FormCanvas::paintEvent(QPaintEvent *) {
         return;
     }
 
-    // ── 3D bezel around the entire form chrome (raised, button-face) ────
-    QRect chrome = formChromeRect();          // titlebar + body
+    // ── 2-px raised 3-D bezel around the form body ─────────────────────
+    QRect chrome = formChromeRect();        // == body rect (no title bar)
     QRect bezel  = chrome.adjusted(-2, -2, 1, 1);
 
-    // Outer 1px highlight (top + left = white, bottom + right = black)
+    // Outer pixel: white top-left, black bottom-right
     p.setPen(QColor(0xff, 0xff, 0xff));
     p.drawLine(bezel.topLeft(),  QPoint(bezel.right(), bezel.top()));
     p.drawLine(bezel.topLeft(),  QPoint(bezel.left(),  bezel.bottom()));
@@ -180,7 +177,7 @@ void FormCanvas::paintEvent(QPaintEvent *) {
     p.drawLine(QPoint(bezel.right(), bezel.top()), bezel.bottomRight());
     p.drawLine(QPoint(bezel.left(),  bezel.bottom()), bezel.bottomRight());
 
-    // Inner 1px (light face / dark shadow) — gives the raised effect
+    // Inner pixel: light face / dark shadow
     QRect inner = bezel.adjusted(1, 1, -1, -1);
     p.setPen(QColor(0xdf, 0xdf, 0xdf));
     p.drawLine(inner.topLeft(),  QPoint(inner.right(), inner.top()));
@@ -188,57 +185,6 @@ void FormCanvas::paintEvent(QPaintEvent *) {
     p.setPen(QColor(0x80, 0x80, 0x80));
     p.drawLine(QPoint(inner.right(), inner.top()), inner.bottomRight());
     p.drawLine(QPoint(inner.left(),  inner.bottom()), inner.bottomRight());
-
-    // ── Title bar (flat #0A246A — Win9x classic active blue) ────────────
-    QRect titleBar(chrome.left(), chrome.top(), chrome.width(), kTitleBarH);
-    p.fillRect(titleBar, QColor(0x0A, 0x24, 0x6A));
-
-    // System-menu glyph: small raised button at the left
-    int sys = kTitleBarH - 4;
-    QRect sysBox(titleBar.left() + 2, titleBar.top() + 2, sys, sys);
-    p.fillRect(sysBox, QColor(0xC0, 0xC0, 0xC0));
-    p.setPen(QColor(0xff, 0xff, 0xff));
-    p.drawLine(sysBox.topLeft(),  QPoint(sysBox.right(), sysBox.top()));
-    p.drawLine(sysBox.topLeft(),  QPoint(sysBox.left(),  sysBox.bottom()));
-    p.setPen(QColor(0x00, 0x00, 0x00));
-    p.drawLine(QPoint(sysBox.right(), sysBox.top()), sysBox.bottomRight());
-    p.drawLine(QPoint(sysBox.left(),  sysBox.bottom()), sysBox.bottomRight());
-    // Inside: a thick horizontal bar (≡ classic system menu glyph)
-    p.setPen(QColor(0x00, 0x00, 0x00));
-    int gy = sysBox.center().y();
-    p.drawLine(sysBox.left() + 3, gy - 1, sysBox.right() - 3, gy - 1);
-    p.drawLine(sysBox.left() + 3, gy,     sysBox.right() - 3, gy);
-
-    // Title text
-    QFont tf("MS Sans Serif", 8, QFont::Bold);
-    p.setFont(tf);
-    p.setPen(QColor(0xff, 0xff, 0xff));
-    int textL = sysBox.right() + 4;
-    int textR = titleBar.right() - (3 * (sys + 2)) - 4;     // room for 3 buttons
-    p.drawText(QRect(textL, titleBar.top(), textR - textL, titleBar.height()),
-               Qt::AlignVCenter | Qt::AlignLeft, m_title);
-
-    // ── Window controls: 3 raised buttons (− □ ×) at top-right ──────────
-    int btn = kTitleBarH - 4;
-    int xR  = titleBar.right() - 2;
-    auto drawCtl = [&](const QString &glyph) {
-        QRect r(xR - btn, titleBar.top() + 2, btn, btn);
-        p.fillRect(r, QColor(0xC0, 0xC0, 0xC0));
-        p.setPen(QColor(0xff, 0xff, 0xff));
-        p.drawLine(r.topLeft(), QPoint(r.right(), r.top()));
-        p.drawLine(r.topLeft(), QPoint(r.left(),  r.bottom()));
-        p.setPen(QColor(0x00, 0x00, 0x00));
-        p.drawLine(QPoint(r.right(), r.top()), r.bottomRight());
-        p.drawLine(QPoint(r.left(),  r.bottom()), r.bottomRight());
-        QFont gf("MS Sans Serif", 7, QFont::Bold);
-        p.setFont(gf);
-        p.setPen(QColor(0x00, 0x00, 0x00));
-        p.drawText(r, Qt::AlignCenter, glyph);
-        xR -= (btn + 1);
-    };
-    drawCtl(QStringLiteral("X"));   // close
-    drawCtl(QStringLiteral("□"));   // maximize
-    drawCtl(QStringLiteral("_"));   // minimize
 }
 
 // ─── Drop handling ─────────────────────────────────────────────────────
@@ -325,6 +271,11 @@ void FormCanvas::selectForm() {
     emit formSelected();
 }
 
+void FormCanvas::selectByName(const QString &name) {
+    for (const Item &it : m_items)
+        if (it.name == name) { selectWidget(it.widget); return; }
+}
+
 void FormCanvas::reorderItems(const QStringList &names) {
     QVector<Item> reordered;
     reordered.reserve(m_items.size());
@@ -362,18 +313,24 @@ void FormCanvas::deleteSelected() {
 }
 
 void FormCanvas::layoutHandles() {
-    bool show = (m_selected != nullptr);
-    if (!show) {
+    // Show handles around either the selected widget (body coords) or the
+    // form body itself (when the form is the selection target).
+    if (!m_selected && !m_formSelected) {
         for (auto *h : m_handles) h->hide();
         return;
     }
-    // Map selected widget geometry (body coords) → canvas coords
-    QRect g = m_selected->geometry();
-    QPoint o = bodyOrigin();
-    QRect cg(g.x() + o.x(), g.y() + o.y(), g.width(), g.height());
+    QRect cg;
+    if (m_selected) {
+        QRect g = m_selected->geometry();
+        QPoint o = bodyOrigin();
+        cg = QRect(g.x() + o.x(), g.y() + o.y(), g.width(), g.height());
+    } else {
+        QPoint o = bodyOrigin();
+        cg = QRect(o, QSize(m_formW, m_formH));
+    }
 
     auto place = [&](SelHandle::Dir d, int cx, int cy) {
-        m_handles[d]->move(cx - 4, cy - 4);
+        m_handles[d]->move(cx - 3, cy - 3);    // handles are 7×7, centred
         m_handles[d]->show();
         m_handles[d]->raise();
     };
@@ -521,45 +478,69 @@ bool FormCanvas::eventFilter(QObject *obj, QEvent *event) {
         }
     }
 
-    // ── Selection handle drag (resize) ───────────────────────────────
+    // ── Selection handle drag (resize widget OR form) ────────────────
     for (auto *h : m_handles) {
         if (obj == h) {
             auto *me = static_cast<QMouseEvent*>(event);
             switch (event->type()) {
             case QEvent::MouseButtonPress:
-                if (me->button() == Qt::LeftButton && m_selected) {
+                if (me->button() == Qt::LeftButton
+                    && (m_selected || m_formSelected)) {
                     m_op          = OpResize;
                     m_resizeDir   = h->direction();
                     m_pressGlobal = me->globalPos();
-                    m_pressGeom   = m_selected->geometry();
+                    m_pressGeom   = m_selected
+                        ? m_selected->geometry()
+                        : QRect(0, 0, m_formW, m_formH);  // form: size only
                 }
                 return true;
             case QEvent::MouseMove:
-                if (m_op == OpResize && m_selected) {
+                if (m_op == OpResize) {
                     QPoint d = me->globalPos() - m_pressGlobal;
-                    QRect g  = m_pressGeom;
                     using D = SelHandle::Dir;
-                    switch (static_cast<D>(m_resizeDir)) {
-                    case D::TL: g.setTopLeft(g.topLeft() + d);             break;
-                    case D::T : g.setTop(g.top() + d.y());                 break;
-                    case D::TR: g.setTopRight(g.topRight() + d);           break;
-                    case D::R : g.setRight(g.right() + d.x());             break;
-                    case D::BR: g.setBottomRight(g.bottomRight() + d);     break;
-                    case D::B : g.setBottom(g.bottom() + d.y());           break;
-                    case D::BL: g.setBottomLeft(g.bottomLeft() + d);       break;
-                    case D::L : g.setLeft(g.left() + d.x());               break;
+                    D dir = static_cast<D>(m_resizeDir);
+
+                    if (m_formSelected && !m_selected) {
+                        // ── Resize the FORM (centered, so just W/H change)
+                        int newW = m_pressGeom.width();
+                        int newH = m_pressGeom.height();
+                        if (dir == D::R || dir == D::TR || dir == D::BR) newW += d.x();
+                        if (dir == D::L || dir == D::TL || dir == D::BL) newW -= d.x();
+                        if (dir == D::B || dir == D::BL || dir == D::BR) newH += d.y();
+                        if (dir == D::T || dir == D::TL || dir == D::TR) newH -= d.y();
+                        if (newW < 80) newW = 80;
+                        if (newH < 60) newH = 60;
+                        if (!(me->modifiers() & Qt::ControlModifier)) {
+                            newW = snapTo(newW, m_gridSize);
+                            newH = snapTo(newH, m_gridSize);
+                        }
+                        setFormSize(QSize(newW, newH));
                     }
-                    if (g.width()  < 8) g.setWidth(8);
-                    if (g.height() < 8) g.setHeight(8);
-                    if (g.left() < 0)   g.moveLeft(0);
-                    if (g.top()  < 0)   g.moveTop(0);
-                    if (g.right()  > m_formW - 1) g.setRight(m_formW - 1);
-                    if (g.bottom() > m_formH - 1) g.setBottom(m_formH - 1);
-                    if (!(me->modifiers() & Qt::ControlModifier))
-                        g = snapRect(g);
-                    m_selected->setGeometry(g);
-                    layoutHandles();
-                    emit modified();
+                    else if (m_selected) {
+                        // ── Resize the selected WIDGET ──────────────
+                        QRect g = m_pressGeom;
+                        switch (dir) {
+                        case D::TL: g.setTopLeft(g.topLeft() + d);             break;
+                        case D::T : g.setTop(g.top() + d.y());                 break;
+                        case D::TR: g.setTopRight(g.topRight() + d);           break;
+                        case D::R : g.setRight(g.right() + d.x());             break;
+                        case D::BR: g.setBottomRight(g.bottomRight() + d);     break;
+                        case D::B : g.setBottom(g.bottom() + d.y());           break;
+                        case D::BL: g.setBottomLeft(g.bottomLeft() + d);       break;
+                        case D::L : g.setLeft(g.left() + d.x());               break;
+                        }
+                        if (g.width()  < 8) g.setWidth(8);
+                        if (g.height() < 8) g.setHeight(8);
+                        if (g.left() < 0)   g.moveLeft(0);
+                        if (g.top()  < 0)   g.moveTop(0);
+                        if (g.right()  > m_formW - 1) g.setRight(m_formW - 1);
+                        if (g.bottom() > m_formH - 1) g.setBottom(m_formH - 1);
+                        if (!(me->modifiers() & Qt::ControlModifier))
+                            g = snapRect(g);
+                        m_selected->setGeometry(g);
+                        layoutHandles();
+                        emit modified();
+                    }
                 }
                 return true;
             case QEvent::MouseButtonRelease:

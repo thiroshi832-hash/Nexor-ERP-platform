@@ -50,6 +50,7 @@ public:
     QString  selectedName()   const;
     QString  selectedType()   const;
     void     selectForm();         // selects the form itself (for property panel)
+    void     selectByName(const QString &name);   // pick widget by item name
 
     // Per-widget mutators called by the PropertyPanel.
     void setNameForSelected(const QString &n);
@@ -138,8 +139,10 @@ private:
     QRect snapRect(const QRect &r) const;
     QRect snapMove(const QRect &r) const;
 
-    // ── Visual chrome constants (VB6 / Windows 9x sizes) ─────────────────
-    static constexpr int kTitleBarH = 19;   // classic Win9x active title bar
+    // ── Visual chrome constants ──────────────────────────────────────────
+    // No title bar in design view — VB6 / WinForms style: the canvas just
+    // shows the form's client area surrounded by a raised bezel.
+    static constexpr int kTitleBarH = 0;
     static constexpr int kPadding   = 30;
 
     // ── Children ─────────────────────────────────────────────────────────

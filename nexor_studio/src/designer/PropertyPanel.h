@@ -91,9 +91,17 @@ private:
     View        m_view     { ViewCategorized };
     QToolButton *m_btnCategorized;
     QToolButton *m_btnAlphabetical;
+    class QComboBox  *m_objectCombo  { nullptr };
+    class QLabel     *m_descLabel    { nullptr };
+    class QLabel     *m_descBody     { nullptr };
     class QFormLayout *m_form { nullptr };
     QHash<QString, class QLabel*> m_cachedLabels;
     QHash<QString, class QLabel*> m_cachedHeaders;
+    QHash<QString, QString>       m_descriptions;   // field name → help text
+
+    void populateObjectCombo();
+    QString descriptionFor(const QString &fieldName) const;
+    void    setDescription(const QString &fieldName);
 
     // Property fields
     QLabel     *m_typeLabel;

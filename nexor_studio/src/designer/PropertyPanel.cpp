@@ -13,47 +13,90 @@
 #include <QHBoxLayout>
 #include <QColorDialog>
 #include <QFileInfo>
+#include <QComboBox>
 
 PropertyPanel::PropertyPanel(QWidget *parent) : QWidget(parent) {
     setObjectName("propertyPanel");
+    // VB6 properties window: white background, MS Sans Serif everywhere,
+    // gray-on-left labels with a thin-line grid look.
     setStyleSheet(R"(
-        #propertyPanel { background:#1b1d23; border-left:1px solid #1e2030; }
+        #propertyPanel { background:#ffffff; border-left:1px solid #808080;
+                         font-family:"MS Sans Serif","Segoe UI"; }
         QLabel#paneHeader {
             background:#0d0e12; color:#8a95a3;
             padding:8px 12px; border-bottom:1px solid #1e2030;
             font-size:11px; font-weight:600; letter-spacing:2px;
         }
         QLabel#sectionHdr {
-            color:#8a95a3; font-size:10px; font-weight:600;
-            letter-spacing:2px; padding:10px 0 4px 0;
+            background:#dcdcdc; color:#000000;
+            font-size:11px; font-weight:600;
+            padding:3px 6px;
+            border-top:1px solid #808080;
+            border-bottom:1px solid #808080;
         }
-        QLabel#fieldLabel { color:#8a95a3; font-size:11px; }
-        QLabel#typeLabel  { color:#5b8cff; font-size:13px; font-weight:600; padding:2px 0; }
-        QLabel#emptyLabel { color:#6a6a6a; font-size:11px; padding:24px 16px; }
+        QLabel#fieldLabel {
+            background:#ECE9D8; color:#000000;
+            font-size:11px;
+            padding:2px 6px;
+            border-right:1px solid #B0B0B0;
+            border-bottom:1px solid #C0C0C0;
+            min-height:18px;
+        }
+        QLabel#typeLabel  { color:#000000; font-size:11px; font-weight:600;
+                            background:#ECE9D8; padding:3px 6px;
+                            border-bottom:1px solid #808080; }
+        QLabel#emptyLabel { color:#808080; font-size:11px; padding:24px 12px;
+                            background:#ffffff; }
 
         QLineEdit, QSpinBox {
-            background:#262932; color:#dce1e7;
-            border:1px solid #353945; border-radius:3px;
-            padding:3px 6px; font-size:12px;
+            background:#ffffff; color:#000000;
+            border:none;
+            border-bottom:1px solid #C0C0C0;
+            padding:1px 4px; font-size:11px;
+            min-height:18px;
         }
-        QLineEdit:focus, QSpinBox:focus { border-color:#5b8cff; }
+        QLineEdit:focus, QSpinBox:focus { background:#FFFFD0; }
 
         QToolButton#anchorBtn {
-            background:#262932; color:#8a95a3;
-            border:1px solid #353945; border-radius:3px;
-            min-width:24px; min-height:22px;
+            background:#ECE9D8; color:#000000;
+            border:1px solid #808080; border-radius:0;
+            min-width:22px; min-height:18px;
             font-weight:600; font-size:11px;
         }
         QToolButton#anchorBtn:checked {
-            background:#1e3a5f; color:#dce1e7; border-color:#5b8cff;
+            background:#0A246A; color:#ffffff; border-color:#000040;
         }
 
         QPushButton#evtBtn {
-            background:#262932; color:#a3e635;
-            border:1px solid #353945; border-radius:3px;
-            padding:4px 8px; font-size:11px; text-align:left;
+            background:#ffffff; color:#0000FF;
+            border:none;
+            border-bottom:1px solid #C0C0C0;
+            padding:2px 6px; font-size:11px; text-align:left;
+            min-height:18px;
         }
-        QPushButton#evtBtn:hover { background:#2d3140; border-color:#5b8cff; }
+        QPushButton#evtBtn:hover { background:#FFFFD0; }
+
+        QComboBox#objCombo {
+            background:#ffffff; color:#000000;
+            border:1px solid #808080; border-radius:0;
+            padding:2px 18px 2px 6px; font-size:11px;
+            min-height:18px;
+        }
+        QComboBox#objCombo:focus    { border-color:#0A246A; }
+        QComboBox#objCombo::drop-down { border:none; width:18px; }
+        QComboBox QAbstractItemView {
+            background:#ffffff; color:#000000;
+            border:1px solid #808080;
+            selection-background-color:#0A246A;
+            selection-color:#ffffff;
+        }
+
+        #descArea { background:#ECE9D8; border-top:1px solid #808080;
+                    border-bottom:1px solid #808080; }
+        QLabel#descTitle { color:#000000; font-size:11px; font-weight:600;
+                           padding:3px 6px 0 6px; }
+        QLabel#descBody  { color:#404040; font-size:11px;
+                           padding:0 6px 4px 6px; }
     )");
 
     auto *col = new QVBoxLayout(this);
@@ -98,11 +141,36 @@ PropertyPanel::PropertyPanel(QWidget *parent) : QWidget(parent) {
         setView(ViewAlphabetical);
     });
 
+    // ── Object combo (VB6 shows "<name> <Type>" of the current target) ──
+    m_objectCombo = new QComboBox(this);
+    m_objectCombo->setObjectName("objCombo");
+    m_objectCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLength);
+    {
+        auto *holder = new QWidget(this);
+        holder->setStyleSheet("background:#ECE9D8;");
+        auto *h = new QHBoxLayout(holder);
+        h->setContentsMargins(4, 4, 4, 4); h->setSpacing(0);
+        h->addWidget(m_objectCombo);
+        col->addWidget(holder);
+    }
+    connect(m_objectCombo, QOverload<int>::of(&QComboBox::activated),
+            this, [this](int idx) {
+        if (m_updating || !m_canvas || idx < 0) return;
+        QString tag = m_objectCombo->itemData(idx, Qt::UserRole + 1).toString();
+        if (tag == "form") {
+            m_canvas->selectForm();
+        } else if (tag == "widget") {
+            QString name = m_objectCombo->itemData(idx, Qt::UserRole + 2).toString();
+            m_canvas->selectByName(name);
+        }
+    });
+
     // ── Body container ─────────────────────────────────────────────────
     auto *body = new QWidget(this);
+    body->setStyleSheet("background:#ffffff;");
     auto *bodyCol = new QVBoxLayout(body);
-    bodyCol->setContentsMargins(12, 12, 12, 12);
-    bodyCol->setSpacing(8);
+    bodyCol->setContentsMargins(0, 0, 0, 0);   // no padding — let cells touch
+    bodyCol->setSpacing(0);
 
     m_typeLabel = new QLabel(body);
     m_typeLabel->setObjectName("typeLabel");
@@ -183,6 +251,37 @@ PropertyPanel::PropertyPanel(QWidget *parent) : QWidget(parent) {
     bodyCol->addWidget(m_emptyLabel);
 
     col->addWidget(body, 1);
+
+    // ── Description pane (VB6's bottom help text) ─────────────────────
+    auto *descArea = new QWidget(this);
+    descArea->setObjectName("descArea");
+    auto *descCol = new QVBoxLayout(descArea);
+    descCol->setContentsMargins(0, 0, 0, 0); descCol->setSpacing(0);
+    m_descLabel = new QLabel("Properties", descArea);
+    m_descLabel->setObjectName("descTitle");
+    m_descBody  = new QLabel("Select a widget on the canvas, "
+                              "or click the form to edit form properties.",
+                              descArea);
+    m_descBody->setObjectName("descBody");
+    m_descBody->setWordWrap(true);
+    m_descBody->setMinimumHeight(48);
+    m_descBody->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    descCol->addWidget(m_descLabel);
+    descCol->addWidget(m_descBody, 1);
+    col->addWidget(descArea);
+
+    // ── Property descriptions (VB6's hint text) ───────────────────────
+    m_descriptions["Name"]       = "Returns the name used in code to identify an object.";
+    m_descriptions["Text"]       = "Returns/sets the text displayed in this control.";
+    m_descriptions["Title"]      = "Returns/sets the form's title bar text (Caption).";
+    m_descriptions["X"]          = "Returns/sets the distance between the left edge of the control and the form.";
+    m_descriptions["Y"]          = "Returns/sets the distance between the top edge of the control and the form.";
+    m_descriptions["Width"]      = "Returns/sets the width of the object.";
+    m_descriptions["Height"]     = "Returns/sets the height of the object.";
+    m_descriptions["Foreground"] = "Returns/sets the foreground color used to display text and graphics.";
+    m_descriptions["Background"] = "Returns/sets the background color used to display text and graphics.";
+    m_descriptions["Visible"]    = "Returns/sets a value indicating whether an object is visible or hidden.";
+    m_descriptions["Anchor"]     = "Returns/sets which edges of the parent the control sticks to when the form resizes.";
 
     // ── Wire field edits → canvas mutators ────────────────────────────
     connect(m_nameEdit, &QLineEdit::editingFinished, this, &PropertyPanel::onNameEdited);
@@ -274,11 +373,56 @@ void PropertyPanel::setMode(Mode m) {
     m_textLabel->setText(m == ModeForm ? "Title" : "Text");
 
     rebuildFormLayout();
+    populateObjectCombo();
 }
 
 void PropertyPanel::setView(View v) {
     m_view = v;
     rebuildFormLayout();
+}
+
+QString PropertyPanel::descriptionFor(const QString &fieldName) const {
+    return m_descriptions.value(fieldName,
+                                "Edit this property to change the selected object.");
+}
+
+void PropertyPanel::setDescription(const QString &fieldName) {
+    if (!m_descLabel || !m_descBody) return;
+    m_descLabel->setText(fieldName);
+    m_descBody->setText(descriptionFor(fieldName));
+}
+
+void PropertyPanel::populateObjectCombo() {
+    if (!m_objectCombo) return;
+    m_updating = true;
+    m_objectCombo->clear();
+    if (m_canvas && !m_canvas->currentFormPath().isEmpty()) {
+        QString formId = QFileInfo(m_canvas->currentFormPath()).completeBaseName();
+        m_objectCombo->addItem(formId + "  Form");
+        int row = m_objectCombo->count() - 1;
+        m_objectCombo->setItemData(row, "form", Qt::UserRole + 1);
+
+        for (const auto &it : m_canvas->items()) {
+            m_objectCombo->addItem(it.name + "  " + it.type);
+            int r = m_objectCombo->count() - 1;
+            m_objectCombo->setItemData(r, "widget", Qt::UserRole + 1);
+            m_objectCombo->setItemData(r, it.name,  Qt::UserRole + 2);
+        }
+
+        // Show the current selection in the combo.
+        int curIdx = 0;
+        if (m_canvas->isFormSelected()) {
+            curIdx = 0;
+        } else if (m_canvas->selectedWidget()) {
+            QString name = m_canvas->selectedName();
+            for (int i = 0; i < m_objectCombo->count(); ++i)
+                if (m_objectCombo->itemData(i, Qt::UserRole + 2).toString() == name) {
+                    curIdx = i; break;
+                }
+        }
+        m_objectCombo->setCurrentIndex(curIdx);
+    }
+    m_updating = false;
 }
 
 QLabel *PropertyPanel::labelFor(const QString &text) {
@@ -488,17 +632,20 @@ QWidget *PropertyPanel::makeEventRow(const QString &eventName) {
 // ── Field-edit handlers ───────────────────────────────────────────────────
 
 void PropertyPanel::onNameEdited() {
+    setDescription("Name");
     if (m_updating || !m_canvas || m_mode != ModeWidget) return;
     m_canvas->setNameForSelected(m_nameEdit->text().trimmed());
     rebuildEventsSection();   // handler names depend on the widget name
 }
 
 void PropertyPanel::onTitleEdited() {
+    setDescription("Title");
     if (m_updating || !m_canvas) return;
     m_canvas->setFormTitle(m_textEdit->text());
 }
 
 void PropertyPanel::onTextEdited() {
+    setDescription(m_mode == ModeForm ? "Title" : "Text");
     if (m_updating || !m_canvas) return;
     m_canvas->setTextForSelected(m_textEdit->text());
 }
