@@ -1,4 +1,5 @@
 QT       += core gui widgets network xml sql
+DEFINES  += NEXOR_HAS_WIDGETS NEXOR_HAS_PROCESS_ENGINE
 
 TARGET   = NexorFlux
 TEMPLATE = app

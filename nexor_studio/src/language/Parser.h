@@ -73,6 +73,9 @@ private:
     // ── Sub / Function
     SubPtr parseSub(bool isFunction);
 
+    // ── Annotations  [Activity(Key := Value, …)]
+    SubAnnotation parseAnnotation();
+
     // ── Expressions (precedence climb)
     ExprPtr parseExpr();
     ExprPtr parseQuery();      // From ... In ... clauses

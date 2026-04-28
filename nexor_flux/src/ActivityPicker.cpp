@@ -6,6 +6,17 @@
 #include "../../nexor_studio/src/runtime/FormRunner.h"
 #include "../../nexor_studio/src/runtime/ProcessEngine.h"
 #include "../../nexor_studio/src/language/NexorRuntime.h"
+#include "../../nexor_studio/src/language/Interpreter.h"
+#include "../../nexor_studio/src/language/Value.h"
+
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QEventLoop>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <cmath>
 
 #include <QTreeWidget>
 #include <QHeaderView>
@@ -27,10 +38,56 @@ namespace nx {
 namespace {
 constexpr int RoleKind = Qt::UserRole + 1;     // 0=form, 1=activity, 2=process
 constexpr int RolePath = Qt::UserRole + 2;     // absolute file path for forms / activities / processes
+
+// Mirror of Core's ValueJson — ServerOnly subs get their args/results
+// shipped as JSON, so client and server need to agree on the wire shape.
+QJsonValue valueToJsonLite(const Value &v) {
+    switch (v.kind()) {
+    case Value::Empty:  return QJsonValue::Null;
+    case Value::Bool:   return v.toBool();
+    case Value::Long:   return static_cast<double>(v.toLong());
+    case Value::Double: return v.toDouble();
+    case Value::String: return v.toText();
+    case Value::List: {
+        QJsonArray a;
+        for (const auto &i : v.listRef()) a.append(valueToJsonLite(i));
+        return a;
+    }
+    default:            return QJsonValue::Null;
+    }
+}
+
+Value jsonLiteToValue(const QJsonValue &j) {
+    switch (j.type()) {
+    case QJsonValue::Null:   return Value();
+    case QJsonValue::Bool:   return Value::boolean(j.toBool());
+    case QJsonValue::Double: {
+        double d = j.toDouble();
+        if (d == std::floor(d) && std::abs(d) < 9.2e18)
+            return Value::integer(static_cast<qint64>(d));
+        return Value::real(d);
+    }
+    case QJsonValue::String: return Value::text(j.toString());
+    case QJsonValue::Array: {
+        QVector<Value> xs;
+        for (const auto &i : j.toArray()) xs.append(jsonLiteToValue(i));
+        return Value::list(std::move(xs));
+    }
+    default:                 return Value();
+    }
+}
 } // namespace
 
-ActivityPicker::ActivityPicker(const QString &projectFile, QWidget *parent)
-    : QDialog(parent), m_projectFile(projectFile) {
+ActivityPicker::ActivityPicker(const QString &projectFile,
+                               const QString &coreUrl,
+                               const QString &adminToken,
+                               const QString &packageId,
+                               QWidget *parent)
+    : QDialog(parent),
+      m_projectFile(projectFile),
+      m_coreUrl(coreUrl),
+      m_adminToken(adminToken),
+      m_packageId(packageId) {
     setWindowTitle("Run...");
     resize(720, 540);
     setStyleSheet(R"(
@@ -212,6 +269,54 @@ void ActivityPicker::onRunActivityMain() {
     rt.setOutput([this](const QString &line){ appendOutput(line, "#dce1e7"); });
     rt.setError ([this](const QString &er) { appendOutput("ERROR: " + er, "#ef4444"); });
     rt.registerProjectSheets(m_project.get());
+
+    // Flux runs as the client.  Server-only subs flip to RPC.
+    rt.interpreter()->setHostRole(Interpreter::HostRole::Client);
+    QString coreUrl = m_coreUrl, adminToken = m_adminToken, packageId = m_packageId;
+    rt.interpreter()->setRpcBridge(
+        [this, coreUrl, adminToken, packageId]
+        (const QString &subName, const QVector<Value> &args) -> Value {
+            if (coreUrl.isEmpty() || packageId.isEmpty()) {
+                appendOutput("RPC bridge not configured.", "#ef4444");
+                return Value();
+            }
+            // Build the JSON envelope.
+            QJsonArray arr;
+            for (const auto &a : args) arr.append(valueToJsonLite(a));
+            QJsonObject body; body.insert("args", arr);
+            QByteArray bytes = QJsonDocument(body).toJson(QJsonDocument::Compact);
+
+            QNetworkAccessManager nam;
+            QUrl url(coreUrl + "/api/v1/rpc/" + packageId + "/" + subName);
+            QNetworkRequest req(url);
+            req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+            if (!adminToken.isEmpty())
+                req.setRawHeader("Authorization",
+                                 ("Bearer " + adminToken).toUtf8());
+            QNetworkReply *r = nam.post(req, bytes);
+            QEventLoop loop;
+            QObject::connect(r, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+            loop.exec();
+            QByteArray rb = r->readAll();
+            int status = r->attribute(
+                QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            r->deleteLater();
+            QJsonDocument doc = QJsonDocument::fromJson(rb);
+            QJsonObject o = doc.object();
+            for (const auto &line : o.value("output").toArray()) {
+                appendOutput("[server] " + line.toString(), "#a3e635");
+            }
+            if (status != 200) {
+                QString er = o.value("error").toString();
+                appendOutput(QString("RPC %1 failed (HTTP %2): %3")
+                                 .arg(subName).arg(status).arg(er),
+                             "#ef4444");
+                return Value();
+            }
+            appendOutput(QString("RPC %1  →  HTTP %2").arg(subName).arg(status), "#5b8cff");
+            return jsonLiteToValue(o.value("result"));
+        });
+
     if (!rt.compile(code, unit)) {
         appendOutput("Compile error: " + rt.lastError(), "#ef4444");
         return;

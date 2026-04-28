@@ -186,9 +186,21 @@ QVector<Token> Lexer::tokenize() {
                 out.append(make(TokKind::Newline, "\n"));
             continue;
         }
-        // ':' is the in-line statement separator (treat as Newline for parser).
+        // ':' is normally the in-line statement separator (treat as Newline
+        // for parser).  ':=' is the named-argument operator used inside
+        // [Activity(Key := Value)] annotations.
         if (c == ':') {
             advance();
+            if (peek() == QChar('=')) {
+                advance();
+                Token t; t.line = line; t.col = col;
+                t.kind = TokKind::Colon; t.lexeme = ":=";
+                out.append(t);                      // Colon ; Eq follows
+                Token e; e.line = line; e.col = col;
+                e.kind = TokKind::Eq; e.lexeme = "=";
+                out.append(e);
+                continue;
+            }
             if (!out.isEmpty() && out.last().kind != TokKind::Newline)
                 out.append(make(TokKind::Newline, ":"));
             continue;

@@ -48,18 +48,92 @@ Program Parser::parse() {
     Program p;
     skipNewlines();
     while (!check(TokKind::Eof) && m_error.isEmpty()) {
+        // Optional [Activity(...)] annotation immediately preceding a Sub
+        // or Function.  Accept multiple annotation blocks; later ones
+        // override earlier keys with the same name.
+        SubAnnotation pending;
+        while (check(TokKind::LBracket)) {
+            SubAnnotation a = parseAnnotation();
+            if (!m_error.isEmpty()) return p;
+            for (auto it = a.args.constBegin(); it != a.args.constEnd(); ++it)
+                pending.args.insert(it.key(), it.value());
+            skipNewlines();
+        }
         // Strip leading Public/Private
         bool _ = matchAny({TokKind::Public, TokKind::Private});
         Q_UNUSED(_);
-        if (match(TokKind::Sub))      { auto s = parseSub(false); if (s) p.subs.append(s); }
-        else if (match(TokKind::Function)) { auto s = parseSub(true);  if (s) p.subs.append(s); }
+        if (match(TokKind::Sub))      {
+            auto s = parseSub(false);
+            if (s) { s->annotation = pending; p.subs.append(s); }
+        }
+        else if (match(TokKind::Function)) {
+            auto s = parseSub(true);
+            if (s) { s->annotation = pending; p.subs.append(s); }
+        }
         else {
+            // Annotations on bare statements aren't allowed - but we
+            // tolerate the syntax silently in case the user is mid-edit.
             auto s = parseStmt();
             if (s) p.topLevel.append(s);
         }
         skipNewlines();
     }
     return p;
+}
+
+// ── [Activity(Key := Value, ...)] ────────────────────────────────────────
+//
+// We accept the "name(args)" form even though only "Activity" is
+// meaningful today, because the architecture (page 6) shows the same
+// shape for future annotations like [Reports(...)] or [Schedule(...)].
+SubAnnotation Parser::parseAnnotation() {
+    SubAnnotation out;
+    expect(TokKind::LBracket, "'['");
+    if (check(TokKind::Ident)) advance();      // annotation kind, e.g. "Activity"
+    if (match(TokKind::LParen)) {
+        if (!check(TokKind::RParen)) {
+            do {
+                Token key = expect(TokKind::Ident, "annotation key");
+                if (m_error.isEmpty()) {
+                    // Accept ':=' (Colon then Eq), or a bare '=', as the
+                    // assignment operator inside annotations.
+                    bool ok = (match(TokKind::Colon) && match(TokKind::Eq))
+                              || match(TokKind::Eq);
+                    if (!ok) {
+                        errorAt(peek(), "expected ':=' after annotation key");
+                        return out;
+                    }
+                    Value v;
+                    const Token &t = peek();
+                    if (t.kind == TokKind::String) {
+                        v = Value::text(t.sval);
+                        advance();
+                    } else if (t.kind == TokKind::Integer) {
+                        v = Value::integer(t.ival);
+                        advance();
+                    } else if (t.kind == TokKind::Double) {
+                        v = Value::real(t.nval);
+                        advance();
+                    } else if (t.kind == TokKind::True || t.kind == TokKind::False) {
+                        v = Value::boolean(t.kind == TokKind::True);
+                        advance();
+                    } else if (t.kind == TokKind::Ident) {
+                        // Identifier: treat as a string token so the host
+                        // can compare against "ServerOnly" / "ClientOnly".
+                        v = Value::text(t.lexeme);
+                        advance();
+                    } else {
+                        errorAt(t, "expected literal in annotation argument");
+                        return out;
+                    }
+                    out.args.insert(key.lexeme.toLower(), v);
+                }
+            } while (match(TokKind::Comma));
+        }
+        expect(TokKind::RParen, "')'");
+    }
+    expect(TokKind::RBracket, "']'");
+    return out;
 }
 
 // ── Sub / Function ────────────────────────────────────────────────────────

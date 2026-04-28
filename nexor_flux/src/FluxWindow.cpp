@@ -369,7 +369,10 @@ void FluxWindow::onRun() {
         return;
     }
     log(QString("Run %1 v%2  (%3)").arg(id, ver, proFile), "#5b8cff");
-    auto *picker = new ActivityPicker(proFile, this);
+    QSettings s;
+    QString token = s.value("Core/AdminToken").toString();
+    auto *picker = new ActivityPicker(proFile, m_client->baseUrl(),
+                                      token, id, this);
     picker->setAttribute(Qt::WA_DeleteOnClose);
     picker->show();
 }
