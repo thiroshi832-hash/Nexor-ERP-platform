@@ -2,6 +2,7 @@
 
 #include "welcome/WelcomePage.h"
 #include "editor/CodeEditor.h"
+#include "editor/EditorView.h"
 #include "designer/DesignerView.h"
 #include "designer/FormCanvas.h"
 
@@ -30,11 +31,11 @@ QWidget *placeholder(const QString &title, const QString &subtitle) {
 
 CentralStack::CentralStack(QWidget *parent) : QStackedWidget(parent) {
     m_welcome      = new WelcomePage;
-    m_editor       = new CodeEditor;
+    m_editorView   = new EditorView;
     m_designerView = new DesignerView;
 
     addWidget(m_welcome);        // PageWelcome
-    addWidget(m_editor);         // PageEditor
+    addWidget(m_editorView);     // PageEditor
     addWidget(m_designerView);   // PageDesigner
     addWidget(placeholder("BUILD",
         "Compilation output will appear here.\n"
@@ -42,6 +43,13 @@ CentralStack::CentralStack(QWidget *parent) : QStackedWidget(parent) {
     addWidget(placeholder("DEBUG",
         "Breakpoint, step and watch panels will live here.\n"
         "Debugger lands in feature/debugger."));
+
+    // Have the editor's Object dropdown follow whatever's on the canvas.
+    m_editorView->setFormCanvas(m_designerView->formCanvas());
+}
+
+CodeEditor *CentralStack::codeEditor() const {
+    return m_editorView ? m_editorView->editor() : nullptr;
 }
 
 FormCanvas *CentralStack::formCanvas() const {

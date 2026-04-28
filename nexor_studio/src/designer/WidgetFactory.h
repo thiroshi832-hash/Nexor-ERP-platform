@@ -34,6 +34,13 @@ public:
 
     // Auto-name prefix per type (Button → btn, Label → lbl, etc.).
     static QString  namePrefix(const QString &type);
+
+    // VB-style "default event" — what double-clicking the control creates.
+    static QString  defaultEvent(const QString &type);
+
+    // All event names this control type emits at runtime (used by the
+    // PropertyPanel's Events section + the Procedure dropdown).
+    static QStringList eventsFor(const QString &type);
 };
 
 #endif // NEXOR_STUDIO_WIDGETFACTORY_H

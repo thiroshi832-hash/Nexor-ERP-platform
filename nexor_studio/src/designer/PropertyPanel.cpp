@@ -64,7 +64,41 @@ PropertyPanel::PropertyPanel(QWidget *parent) : QWidget(parent) {
     header->setObjectName("paneHeader");
     col->addWidget(header);
 
-    // ── Body container with scrolling form ────────────────────────────
+    // ── View toggle (Categorized / Alphabetical) ─────────────────────
+    auto *toggleRow = new QWidget(this);
+    toggleRow->setStyleSheet("background:#181a22; border-bottom:1px solid #1e2030;");
+    auto *toggleH = new QHBoxLayout(toggleRow);
+    toggleH->setContentsMargins(8, 4, 8, 4); toggleH->setSpacing(4);
+    auto makeViewBtn = [&](const QString &t) {
+        auto *b = new QToolButton(toggleRow);
+        b->setText(t); b->setCheckable(true);
+        b->setStyleSheet(
+            "QToolButton { background:transparent; color:#8a95a3;"
+            " border:none; padding:4px 10px; font-size:11px; font-weight:600;"
+            " letter-spacing:1px; }"
+            "QToolButton:hover { color:#dce1e7; }"
+            "QToolButton:checked { color:#5b8cff; border-bottom:2px solid #5b8cff; }");
+        return b;
+    };
+    m_btnCategorized  = makeViewBtn("Categorized");
+    m_btnAlphabetical = makeViewBtn("Alphabetical");
+    m_btnCategorized->setChecked(true);
+    toggleH->addWidget(m_btnCategorized);
+    toggleH->addWidget(m_btnAlphabetical);
+    toggleH->addStretch();
+    col->addWidget(toggleRow);
+    connect(m_btnCategorized,  &QToolButton::clicked, this, [this]{
+        m_btnCategorized->setChecked(true);
+        m_btnAlphabetical->setChecked(false);
+        setView(ViewCategorized);
+    });
+    connect(m_btnAlphabetical, &QToolButton::clicked, this, [this]{
+        m_btnAlphabetical->setChecked(true);
+        m_btnCategorized->setChecked(false);
+        setView(ViewAlphabetical);
+    });
+
+    // ── Body container ─────────────────────────────────────────────────
     auto *body = new QWidget(this);
     auto *bodyCol = new QVBoxLayout(body);
     bodyCol->setContentsMargins(12, 12, 12, 12);
@@ -74,10 +108,10 @@ PropertyPanel::PropertyPanel(QWidget *parent) : QWidget(parent) {
     m_typeLabel->setObjectName("typeLabel");
     bodyCol->addWidget(m_typeLabel);
 
-    auto *form = new QFormLayout;
-    form->setLabelAlignment(Qt::AlignLeft);
-    form->setHorizontalSpacing(10);
-    form->setVerticalSpacing(6);
+    m_form = new QFormLayout;
+    m_form->setLabelAlignment(Qt::AlignLeft);
+    m_form->setHorizontalSpacing(10);
+    m_form->setVerticalSpacing(4);
 
     auto fieldLabel = [&](const QString &t) {
         auto *l = new QLabel(t, body);
@@ -85,43 +119,19 @@ PropertyPanel::PropertyPanel(QWidget *parent) : QWidget(parent) {
         return l;
     };
 
+    // ── Field widgets (kept as members; rebuilt into the layout on toggle) ─
     m_nameEdit = new QLineEdit(body);
-    form->addRow(fieldLabel("Name"), m_nameEdit);
-
-    // Text / Title share one row; the label changes per mode.
     m_textLabel = fieldLabel("Text");
     m_textEdit  = new QLineEdit(body);
-    form->addRow(m_textLabel, m_textEdit);
 
-    auto rowSpins = [&](const QString &t1, QSpinBox *&s1,
-                        const QString &t2, QSpinBox *&s2) {
-        s1 = new QSpinBox(body); s1->setRange(0, 4000); s1->setFixedWidth(70);
-        s2 = new QSpinBox(body); s2->setRange(0, 4000); s2->setFixedWidth(70);
-        auto *row = new QWidget(body);
-        auto *h = new QHBoxLayout(row);
-        h->setContentsMargins(0, 0, 0, 0); h->setSpacing(6);
-        h->addWidget(new QLabel(t1));
-        h->addWidget(s1);
-        h->addSpacing(8);
-        h->addWidget(new QLabel(t2));
-        h->addWidget(s2);
-        h->addStretch();
-        return row;
-    };
-    QSpinBox *xS=nullptr,*yS=nullptr,*wS=nullptr,*hS=nullptr;
-    auto *posRow  = rowSpins("x", xS, "y", yS);
-    auto *sizeRow = rowSpins("w", wS, "h", hS);
-    m_xSpin = xS; m_ySpin = yS; m_wSpin = wS; m_hSpin = hS;
-    form->addRow(fieldLabel("Position"), posRow);
-    form->addRow(fieldLabel("Size"),     sizeRow);
+    m_xSpin = new QSpinBox(body); m_xSpin->setRange(0, 4000); m_xSpin->setFixedWidth(70);
+    m_ySpin = new QSpinBox(body); m_ySpin->setRange(0, 4000); m_ySpin->setFixedWidth(70);
+    m_wSpin = new QSpinBox(body); m_wSpin->setRange(0, 4000); m_wSpin->setFixedWidth(70);
+    m_hSpin = new QSpinBox(body); m_hSpin->setRange(0, 4000); m_hSpin->setFixedWidth(70);
 
-    // Foreground / Background colour pickers
     m_fgBtn = makeColorBtn();
     m_bgBtn = makeColorBtn();
-    form->addRow(fieldLabel("Foreground"), m_fgBtn);
-    form->addRow(fieldLabel("Background"), m_bgBtn);
 
-    // Visible (widgets only)
     m_visibleCheck = new QCheckBox(body);
     m_visibleCheck->setChecked(true);
     {
@@ -132,9 +142,7 @@ PropertyPanel::PropertyPanel(QWidget *parent) : QWidget(parent) {
         h->addStretch();
         m_visibleRow = row;
     }
-    form->addRow(fieldLabel("Visible"), m_visibleRow);
 
-    // Anchor (widgets only)
     m_anchorT = makeAnchorBtn("T");
     m_anchorL = makeAnchorBtn("L");
     m_anchorR = makeAnchorBtn("R");
@@ -150,9 +158,8 @@ PropertyPanel::PropertyPanel(QWidget *parent) : QWidget(parent) {
         h->addStretch();
         m_anchorRow = row;
     }
-    form->addRow(fieldLabel("Anchor"), m_anchorRow);
 
-    bodyCol->addLayout(form);
+    bodyCol->addLayout(m_form);
 
     // ── Events section ─────────────────────────────────────────────────
     auto *evtHdr = new QLabel("EVENTS", body);
@@ -259,12 +266,84 @@ void PropertyPanel::setMode(Mode m) {
     m_emptyLabel ->setVisible(!hasSel);
     m_eventsBox  ->setVisible(hasSel);
 
-    // Position fields — for the form, X/Y are not meaningful, only W/H.
+    // For the form, X/Y are not meaningful — only W/H.
     m_xSpin->setEnabled(m == ModeWidget);
     m_ySpin->setEnabled(m == ModeWidget);
 
     // Text / Title label
     m_textLabel->setText(m == ModeForm ? "Title" : "Text");
+
+    rebuildFormLayout();
+}
+
+void PropertyPanel::setView(View v) {
+    m_view = v;
+    rebuildFormLayout();
+}
+
+void PropertyPanel::rebuildFormLayout() {
+    if (!m_form) return;
+    // Detach all rows without deleting their widgets.
+    while (m_form->rowCount() > 0) {
+        QFormLayout::TakeRowResult r = m_form->takeRow(0);
+        if (r.labelItem)  delete r.labelItem;
+        if (r.fieldItem)  delete r.fieldItem;
+    }
+    if (m_mode == ModeEmpty) return;
+
+    auto add = [&](const QString &lbl, QWidget *editor) {
+        auto *l = new QLabel(lbl);
+        l->setObjectName("fieldLabel");
+        m_form->addRow(l, editor);
+        editor->setVisible(true);
+    };
+    auto addHeader = [&](const QString &text) {
+        if (m_view != ViewCategorized) return;
+        auto *h = new QLabel(text);
+        h->setObjectName("sectionHdr");
+        m_form->addRow(h);
+    };
+
+    if (m_view == ViewCategorized) {
+        add("Name", m_nameEdit);
+        addHeader("LAYOUT");
+        add("X", m_xSpin);
+        add("Y", m_ySpin);
+        add("Width",  m_wSpin);
+        add("Height", m_hSpin);
+        addHeader("COMMON");
+        add(m_mode == ModeForm ? "Title" : "Text", m_textEdit);
+        addHeader("APPEARANCE");
+        add("Foreground", m_fgBtn);
+        add("Background", m_bgBtn);
+        if (m_mode == ModeWidget) {
+            addHeader("BEHAVIOR");
+            add("Visible", m_visibleRow);
+            add("Anchor",  m_anchorRow);
+        }
+    } else {
+        // Alphabetical — flat sorted list.
+        QVector<QPair<QString, QWidget*>> rows;
+        rows << QPair<QString,QWidget*>("Background", m_bgBtn);
+        rows << QPair<QString,QWidget*>("Foreground", m_fgBtn);
+        rows << QPair<QString,QWidget*>("Height",     m_hSpin);
+        rows << QPair<QString,QWidget*>("Name",       m_nameEdit);
+        rows << QPair<QString,QWidget*>(m_mode == ModeForm ? "Title" : "Text",
+                                        m_textEdit);
+        rows << QPair<QString,QWidget*>("Width",      m_wSpin);
+        rows << QPair<QString,QWidget*>("X",          m_xSpin);
+        rows << QPair<QString,QWidget*>("Y",          m_ySpin);
+        if (m_mode == ModeWidget) {
+            rows << QPair<QString,QWidget*>("Anchor",  m_anchorRow);
+            rows << QPair<QString,QWidget*>("Visible", m_visibleRow);
+        }
+        std::sort(rows.begin(), rows.end(),
+                  [](const QPair<QString,QWidget*> &a,
+                     const QPair<QString,QWidget*> &b){
+                       return a.first.toLower() < b.first.toLower();
+                  });
+        for (const auto &r : rows) add(r.first, r.second);
+    }
 }
 
 void PropertyPanel::onSelectionChanged(QWidget *w) {

@@ -143,6 +143,25 @@ QSize WidgetFactory::defaultSize(const QString &type) {
     return {100, 24};
 }
 
+QString WidgetFactory::defaultEvent(const QString &type) {
+    if (type == "TextBox" || type == "TextArea")    return "Change";
+    if (type == "ComboBox" || type == "ListBox")    return "Change";
+    if (type == "Slider" || type == "DateTimePicker"
+     || type == "NumericUpDown")                    return "Change";
+    return "Click";    // Buttons / Label / CheckBox / RadioButton / etc.
+}
+
+QStringList WidgetFactory::eventsFor(const QString &type) {
+    static const QStringList common = { "Click", "DoubleClick", "RightClick" };
+    if (type == "TextBox" || type == "TextArea"
+     || type == "ComboBox" || type == "ListBox"
+     || type == "Slider"   || type == "DateTimePicker"
+     || type == "NumericUpDown") {
+        return QStringList{ "Change" } + common;
+    }
+    return common;
+}
+
 QString WidgetFactory::namePrefix(const QString &type) {
     if (type == "Button")          return "btn";
     if (type == "Label")           return "lbl";

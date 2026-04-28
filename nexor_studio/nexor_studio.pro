@@ -14,6 +14,7 @@ SOURCES += \
     src/ide/OutputPane.cpp \
     src/welcome/WelcomePage.cpp \
     src/editor/CodeEditor.cpp \
+    src/editor/EditorView.cpp \
     src/editor/NexorHighlighter.cpp \
     src/designer/WidgetFactory.cpp \
     src/designer/FormCanvas.cpp \
@@ -25,7 +26,8 @@ SOURCES += \
     src/project/Activity.cpp \
     src/project/ProjectTree.cpp \
     src/dialogs/NewProjectDialog.cpp \
-    src/dialogs/NewActivityDialog.cpp
+    src/dialogs/NewActivityDialog.cpp \
+    src/dialogs/TabOrderDialog.cpp
 
 HEADERS += \
     src/ide/MainWindow.h \
@@ -34,6 +36,7 @@ HEADERS += \
     src/ide/OutputPane.h \
     src/welcome/WelcomePage.h \
     src/editor/CodeEditor.h \
+    src/editor/EditorView.h \
     src/editor/NexorHighlighter.h \
     src/designer/WidgetFactory.h \
     src/designer/FormCanvas.h \
@@ -45,7 +48,8 @@ HEADERS += \
     src/project/Activity.h \
     src/project/ProjectTree.h \
     src/dialogs/NewProjectDialog.h \
-    src/dialogs/NewActivityDialog.h
+    src/dialogs/NewActivityDialog.h \
+    src/dialogs/TabOrderDialog.h
 
 DESTDIR     = $$PWD/../bin
 OBJECTS_DIR = $$PWD/build/obj

@@ -64,12 +64,15 @@ private slots:
 
 private:
     enum Mode { ModeEmpty, ModeWidget, ModeForm };
+    enum View { ViewCategorized, ViewAlphabetical };
 
     QPushButton *makeColorBtn();
     QToolButton *makeAnchorBtn(const QString &letter);
     QWidget     *makeEventRow(const QString &eventName);
     void         updateColorBtn(QPushButton *btn, const QColor &c);
     void         setMode(Mode m);
+    void         setView(View v);
+    void         rebuildFormLayout();
     void         rebuildEventsSection();
     QString      anchorString() const;
     void         applyAnchorString(const QString &s);
@@ -77,6 +80,10 @@ private:
     FormCanvas *m_canvas { nullptr };
     bool        m_updating { false };
     Mode        m_mode     { ModeEmpty };
+    View        m_view     { ViewCategorized };
+    QToolButton *m_btnCategorized;
+    QToolButton *m_btnAlphabetical;
+    class QFormLayout *m_form { nullptr };
 
     // Property fields
     QLabel     *m_typeLabel;

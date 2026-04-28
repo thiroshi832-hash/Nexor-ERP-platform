@@ -5,9 +5,12 @@
 
 #include "welcome/WelcomePage.h"
 #include "editor/CodeEditor.h"
+#include "editor/EditorView.h"
 #include "designer/FormCanvas.h"
 #include "designer/DesignerView.h"
 #include "designer/PropertyPanel.h"
+#include "designer/WidgetFactory.h"
+#include "dialogs/TabOrderDialog.h"
 #include "runtime/FormRunner.h"
 #include "project/Project.h"
 
@@ -166,9 +169,7 @@ void MainWindow::setupUi() {
     // PropertyPanel "+ generate handler" button → insert stub into the form
     // code (in the editor if it's already showing this form's code; in the
     // canvas otherwise) and switch to Edit mode focused on the new sub.
-    connect(m_central->designerView()->propertyPanel(),
-            &PropertyPanel::eventHandlerRequested,
-            this, [this](const QString &target, const QString &event) {
+    auto generateHandler = [this](const QString &target, const QString &event){
         QString subName = target + "_" + event;
         auto *editor = m_central->codeEditor();
         auto *canvas = m_central->formCanvas();
@@ -213,7 +214,32 @@ void MainWindow::setupUi() {
         // Switch to Edit mode.
         m_tabBar->setCurrentMode(FancyTabBar::ModeEdit);
         m_central->showPage(CentralStack::PageEditor);
-    });
+    };
+
+    connect(m_central->designerView()->propertyPanel(),
+            &PropertyPanel::eventHandlerRequested,
+            this, generateHandler);
+
+    // EditorView's Object/Procedure dropdown — same code path.
+    connect(m_central->editorView(),
+            &EditorView::eventHandlerRequested,
+            this, generateHandler);
+
+    // F2: double-click a widget on the canvas → default event for its type.
+    connect(m_central->formCanvas(), &FormCanvas::widgetDoubleClicked,
+            this, [generateHandler](const QString &name, const QString &type){
+                generateHandler(name, WidgetFactory::defaultEvent(type));
+            });
+
+    // F2: double-click empty form area → Form_Load.
+    connect(m_central->formCanvas(), &FormCanvas::formDoubleClicked,
+            this, [this, generateHandler]{
+                if (!m_central->formCanvas()
+                 || m_central->formCanvas()->currentFormPath().isEmpty()) return;
+                QString formId = QFileInfo(
+                    m_central->formCanvas()->currentFormPath()).completeBaseName();
+                generateHandler(formId, "Load");
+            });
 }
 
 void MainWindow::buildMenus() {
@@ -286,6 +312,18 @@ void MainWindow::buildMenus() {
         if (m_outputPane) m_outputPane->setVisible(on);
     });
     viewMenu->addAction(m_toggleOutputPaneAction);
+
+    viewMenu->addSeparator();
+    viewMenu->addAction("&Tab Order...", this, [this]{
+        if (!m_central->formCanvas()
+         || m_central->formCanvas()->currentFormPath().isEmpty()) {
+            QMessageBox::information(this, "Tab Order",
+                "Open a form first.");
+            return;
+        }
+        TabOrderDialog dlg(m_central->formCanvas(), this);
+        dlg.exec();
+    });
 
     auto *buildMenu = menuBar()->addMenu("&Build");
     buildMenu->addAction("Build Project")->setEnabled(false);
@@ -454,7 +492,10 @@ void MainWindow::onFormActivated(const QString &absPath) {
     if (m_central->codeEditor()->loadForm(absPath))
         appendOutput("Loaded form code: " + absPath, "#5b8cff");
 
-    // 3. Switch to Design mode (user can hit EDIT to see the form's code).
+    // 3. Refresh the Object/Procedure dropdowns to list the form + widgets.
+    m_central->editorView()->refresh();
+
+    // 4. Switch to Design mode (user can hit EDIT to see the form's code).
     m_tabBar->setCurrentMode(FancyTabBar::ModeDesign);
     m_central->showPage(CentralStack::PageDesigner);
 }
@@ -465,6 +506,7 @@ void MainWindow::onActivityActivated(const QString &absPath) {
         return;
     }
     appendOutput("Open activity: " + absPath, "#a3e635");
+    m_central->editorView()->refresh();   // dropdowns become "(General)" only
     m_tabBar->setCurrentMode(FancyTabBar::ModeEdit);
     m_central->showPage(CentralStack::PageEditor);
 }

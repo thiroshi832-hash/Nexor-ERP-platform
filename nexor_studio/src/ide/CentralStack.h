@@ -8,6 +8,7 @@
 
 class WelcomePage;
 class CodeEditor;
+class EditorView;
 class FormCanvas;
 class DesignerView;
 
@@ -19,15 +20,16 @@ public:
     explicit CentralStack(QWidget *parent = nullptr);
 
     WelcomePage  *welcomePage()  const { return m_welcome; }
-    CodeEditor   *codeEditor()   const { return m_editor; }
+    CodeEditor   *codeEditor()   const;          // shortcut: editorView()->editor()
+    EditorView   *editorView()   const { return m_editorView; }
     DesignerView *designerView() const { return m_designerView; }
-    FormCanvas   *formCanvas()   const;     // shortcut to designerView->formCanvas()
+    FormCanvas   *formCanvas()   const;
 
     void showPage(Page p) { setCurrentIndex(p); }
 
 private:
     WelcomePage  *m_welcome      { nullptr };
-    CodeEditor   *m_editor       { nullptr };
+    EditorView   *m_editorView   { nullptr };
     DesignerView *m_designerView { nullptr };
 };
 

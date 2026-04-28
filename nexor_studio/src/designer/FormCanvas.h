@@ -70,7 +70,16 @@ public:
     struct Item { QString type; QString name; QWidget *widget; };
     const QVector<Item>& items() const { return m_items; }
 
+    // Reorders m_items to match the supplied widget-name list.  Also calls
+    // QWidget::setTabOrder so the actual focus chain reflects the new order.
+    void reorderItems(const QStringList &names);
+
     QSize sizeHint() const override;
+
+    int  gridSize() const     { return m_gridSize; }
+    void setGridSize(int n)   { m_gridSize = qMax(1, n); update(); }
+    bool snapEnabled() const  { return m_snapEnabled; }
+    void setSnapEnabled(bool on) { m_snapEnabled = on; }
 
     // Form-level event-driven code (Form_Load, btnX_Click, ...) — lives in
     // the .frm file alongside the widgets.  The CodeEditor edits this string
@@ -81,6 +90,8 @@ public:
 signals:
     void selectionChanged(QWidget *w);   // null when nothing OR form selected
     void formSelected();                  // emitted when the form is picked
+    void widgetDoubleClicked(const QString &name, const QString &type);
+    void formDoubleClicked();             // double-click empty form area
     void modified();
 
 protected:
@@ -119,6 +130,12 @@ private:
     int     m_formW { 640 };
     int     m_formH { 480 };
     bool    m_formSelected { false };
+    int     m_gridSize    { 8 };
+    bool    m_snapEnabled { true };
+
+    static int snapTo(int v, int g) { return ((v + g/2) / g) * g; }
+    QRect snapRect(const QRect &r) const;
+    QRect snapMove(const QRect &r) const;
 
     // ── Visual chrome constants ──────────────────────────────────────────
     static constexpr int kTitleBarH = 28;

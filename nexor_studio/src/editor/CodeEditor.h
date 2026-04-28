@@ -41,6 +41,7 @@ public:
 
 protected:
     void resizeEvent(QResizeEvent *e) override;
+    void paintEvent(QPaintEvent  *e) override;
 
 private slots:
     void updateLineNumberAreaWidth(int newBlockCount);

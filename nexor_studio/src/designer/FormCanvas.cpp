@@ -98,6 +98,19 @@ void FormCanvas::layoutBody() {
     update();
 }
 
+QRect FormCanvas::snapRect(const QRect &r) const {
+    if (!m_snapEnabled) return r;
+    int g = m_gridSize;
+    return QRect(snapTo(r.left(), g),  snapTo(r.top(), g),
+                 qMax(g, snapTo(r.width(), g)),
+                 qMax(g, snapTo(r.height(), g)));
+}
+QRect FormCanvas::snapMove(const QRect &r) const {
+    if (!m_snapEnabled) return r;
+    int g = m_gridSize;
+    return QRect(snapTo(r.left(), g), snapTo(r.top(), g), r.width(), r.height());
+}
+
 void FormCanvas::resizeEvent(QResizeEvent *) {
     layoutBody();
 }
@@ -246,6 +259,29 @@ void FormCanvas::selectForm() {
     update();
     emit selectionChanged(nullptr);
     emit formSelected();
+}
+
+void FormCanvas::reorderItems(const QStringList &names) {
+    QVector<Item> reordered;
+    reordered.reserve(m_items.size());
+    QSet<QString> taken;
+    for (const QString &n : names) {
+        for (const Item &it : m_items)
+            if (it.name == n && !taken.contains(n)) {
+                reordered.append(it);
+                taken.insert(n);
+                break;
+            }
+    }
+    // Append anything the caller didn't list.
+    for (const Item &it : m_items)
+        if (!taken.contains(it.name)) reordered.append(it);
+
+    m_items = reordered;
+    // Apply to Qt's focus chain
+    for (int i = 1; i < m_items.size(); ++i)
+        QWidget::setTabOrder(m_items[i - 1].widget, m_items[i].widget);
+    emit modified();
 }
 
 void FormCanvas::deleteSelected() {
@@ -412,6 +448,10 @@ bool FormCanvas::eventFilter(QObject *obj, QEvent *event) {
             selectForm();                      // body click selects the form
             setFocus(Qt::MouseFocusReason);
             return false;
+        case QEvent::MouseButtonDblClick:
+            selectForm();
+            emit formDoubleClicked();
+            return true;
         default:
             return false;
         }
@@ -451,6 +491,8 @@ bool FormCanvas::eventFilter(QObject *obj, QEvent *event) {
                     if (g.top()  < 0)   g.moveTop(0);
                     if (g.right()  > m_formW - 1) g.setRight(m_formW - 1);
                     if (g.bottom() > m_formH - 1) g.setBottom(m_formH - 1);
+                    if (!(me->modifiers() & Qt::ControlModifier))
+                        g = snapRect(g);
                     m_selected->setGeometry(g);
                     layoutHandles();
                     emit modified();
@@ -465,12 +507,16 @@ bool FormCanvas::eventFilter(QObject *obj, QEvent *event) {
         }
     }
 
-    // ── Designed-widget interception (select / move) ─────────────────
+    // ── Designed-widget interception (select / move / dbl-click) ─────
     int idx = itemIndexFor(qobject_cast<QWidget*>(obj));
     if (idx >= 0) {
         QWidget *w  = m_items[idx].widget;
         auto *me    = static_cast<QMouseEvent*>(event);
         switch (event->type()) {
+        case QEvent::MouseButtonDblClick:
+            selectWidget(w);
+            emit widgetDoubleClicked(m_items[idx].name, m_items[idx].type);
+            return true;
         case QEvent::MouseButtonPress:
             if (me->button() == Qt::LeftButton) {
                 selectWidget(w);
@@ -488,6 +534,8 @@ bool FormCanvas::eventFilter(QObject *obj, QEvent *event) {
                 if (g.top()  < 0) g.moveTop(0);
                 if (g.right()  > m_formW - 1) g.moveRight(m_formW - 1);
                 if (g.bottom() > m_formH - 1) g.moveBottom(m_formH - 1);
+                if (!(me->modifiers() & Qt::ControlModifier))
+                    g = snapMove(g);
                 w->setGeometry(g);
                 layoutHandles();
                 emit modified();

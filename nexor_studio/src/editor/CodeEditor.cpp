@@ -190,6 +190,30 @@ void CodeEditor::resizeEvent(QResizeEvent *e) {
                                         lineNumberAreaWidth(), cr.height()));
 }
 
+// Paint a thin separator above any block whose first non-whitespace token is
+// "Sub" or "Function" — matches VB6's procedure-separator behaviour.
+void CodeEditor::paintEvent(QPaintEvent *e) {
+    QPlainTextEdit::paintEvent(e);
+
+    QPainter painter(viewport());
+    painter.setPen(QColor(0x40, 0x44, 0x52));
+
+    QTextBlock block = firstVisibleBlock();
+    while (block.isValid()) {
+        QRectF g = blockBoundingGeometry(block).translated(contentOffset());
+        if (g.top() > viewport()->height()) break;
+
+        QString trimmed = block.text().trimmed();
+        bool startsSub  = trimmed.startsWith(QStringLiteral("Sub "),      Qt::CaseInsensitive)
+                       || trimmed.startsWith(QStringLiteral("Function "), Qt::CaseInsensitive);
+        // Don't draw on the very first block (would clip at the top).
+        if (startsSub && block.blockNumber() > 0)
+            painter.drawLine(0, int(g.top()) - 1,
+                             viewport()->width(), int(g.top()) - 1);
+        block = block.next();
+    }
+}
+
 void CodeEditor::highlightCurrentLine() {
     QList<QTextEdit::ExtraSelection> sels;
     if (!isReadOnly()) {
