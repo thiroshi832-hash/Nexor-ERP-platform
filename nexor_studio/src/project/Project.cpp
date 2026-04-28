@@ -66,6 +66,40 @@ std::shared_ptr<Activity> Project::createAtomicActivity(const ActivityMeta &meta
     return act;
 }
 
+std::shared_ptr<Process> Project::createProcess(const ProcessMeta &meta, QString *errorOut) {
+    if (meta.id.trimmed().isEmpty()) {
+        if (errorOut) *errorOut = "Process ID must not be empty.";
+        return nullptr;
+    }
+    for (const auto &p : m_processActivities) {
+        if (p->meta().id.compare(meta.id, Qt::CaseInsensitive) == 0) {
+            if (errorOut) *errorOut = QString("Process '%1' already exists.").arg(meta.id);
+            return nullptr;
+        }
+    }
+    QString root = rootDir();
+    if (root.isEmpty()) {
+        if (errorOut) *errorOut = "Project must be saved before adding processes.";
+        return nullptr;
+    }
+
+    QString prcDir  = root + "/processes/" + meta.id;
+    QString prcPath = prcDir + "/" + meta.id + ".prc";
+    if (!QDir().mkpath(prcDir)) {
+        if (errorOut) *errorOut = "Could not create process directory: " + prcDir;
+        return nullptr;
+    }
+    auto prc = std::make_shared<Process>(meta);
+    prc->setFilePath(prcPath);
+    if (!prc->save()) {
+        if (errorOut) *errorOut = "Could not write process file: " + prcPath;
+        return nullptr;
+    }
+    m_processActivities.append(prc);
+    save();
+    return prc;
+}
+
 std::shared_ptr<Sheet> Project::createSheet(const SheetMeta &meta, QString *errorOut) {
     if (meta.id.trimmed().isEmpty()) {
         if (errorOut) *errorOut = "Sheet ID must not be empty.";
@@ -137,7 +171,14 @@ bool Project::save() const {
     }
     w.writeEndElement();
 
-    writeStringList("ProcessActivities", "Process",  m_processActivities);
+    w.writeStartElement("ProcessActivities");
+    for (const auto &p : m_processActivities) {
+        w.writeStartElement("Process");
+        w.writeAttribute("id",   p->meta().id);
+        w.writeAttribute("file", QDir(rootDir()).relativeFilePath(p->filePath()));
+        w.writeEndElement();
+    }
+    w.writeEndElement();
 
     w.writeStartElement("Sheets");
     for (const auto &s : m_sheets) {
@@ -174,7 +215,6 @@ bool Project::load() {
         else if (name == "Author")      m_meta.author      = r.readElementText();
         else if (name == "Created")     m_meta.created     = QDateTime::fromString(r.readElementText(), Qt::ISODate);
         else if (name == "Event")       m_events           << r.readElementText();
-        else if (name == "Process")     m_processActivities<< r.readElementText();
         else if (name == "Report")      m_reports          << r.readElementText();
         else if (name == "Resource")    m_resources        << r.readElementText();
         else if (name == "Activity") {
@@ -183,6 +223,13 @@ bool Project::load() {
             act->setFilePath(QDir(rootDir()).absoluteFilePath(rel));
             act->load();
             m_atomicActivities.append(act);
+        }
+        else if (name == "Process" && r.attributes().hasAttribute("file")) {
+            QString rel = r.attributes().value("file").toString();
+            auto prc = std::make_shared<Process>();
+            prc->setFilePath(QDir(rootDir()).absoluteFilePath(rel));
+            prc->load();
+            m_processActivities.append(prc);
         }
         else if (name == "Sheet" && r.attributes().hasAttribute("file")) {
             // New format: Sheet element references a .sht file.

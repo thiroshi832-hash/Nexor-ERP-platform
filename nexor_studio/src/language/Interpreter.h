@@ -33,6 +33,8 @@ public:
     // Hook for Print output (and runtime error reporting).
     void setOutput(OutputCallback cb)      { m_output = std::move(cb); }
     void setError (OutputCallback cb)      { m_errorOut = std::move(cb); }
+    OutputCallback output() const          { return m_output; }
+    OutputCallback errorOut() const        { return m_errorOut; }
 
     // Register a parsed source unit (.aba or .frm <Code>).
     // Top-level Dim statements run immediately to initialise globals.
@@ -59,6 +61,13 @@ public:
     // Sheets / entities
     EntityStore *entityStore() { return &m_store; }
     void         registerSheet(const SheetSchema &schema);
+
+    // Processes — exposes  <ProcessName>.Start()  as a runtime callable.
+    // The host (FormRunner / MainWindow / Activity) supplies the runner
+    // callback so the Interpreter does not depend on ProcessEngine.
+    using ProcessRunner = std::function<Value(const QVector<Value> &args)>;
+    void registerProcess(const QString &name, ProcessRunner runner);
+    bool hasProcess(const QString &name) const;
 
     // Form bridge — FormRunner installs these so user code that says
     //   Form.Save()        Form.Load(id)        Form.Current.Name
@@ -102,6 +111,7 @@ private:
     std::shared_ptr<Environment>    m_globals;
     QHash<QString, SubPtr>          m_subs;          // case-insensitive (toLower)
     QHash<QString, BuiltinFn>       m_builtins;
+    QHash<QString, ProcessRunner>   m_processes;    // case-insensitive
     EntityStore                     m_store;
 
     OutputCallback m_output;

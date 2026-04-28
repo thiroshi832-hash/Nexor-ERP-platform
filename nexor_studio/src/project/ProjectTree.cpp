@@ -2,6 +2,7 @@
 #include "Project.h"
 #include "Activity.h"
 #include "Sheet.h"
+#include "Process.h"
 
 #include <QHeaderView>
 #include <QMenu>
@@ -68,7 +69,7 @@ void ProjectTree::refresh() {
 
     rebuildList(m_groupEvents,    m_project->events());
     rebuildAtomicActivities(m_groupAtomic);
-    rebuildList(m_groupProcess,   m_project->processActivities());
+    rebuildProcesses(m_groupProcess);
     rebuildSheets(m_groupSheets);
     rebuildList(m_groupReports,   m_project->reports());
     rebuildList(m_groupResources, m_project->resources());
@@ -141,6 +142,18 @@ void ProjectTree::onItemDoubleClicked(QTreeWidgetItem *item, int /*column*/) {
         emit activityActivated(item->data(0, Qt::UserRole).toString());
     } else if (kind == NodeSheet) {
         emit sheetActivated(item->data(0, Qt::UserRole).toString());
+    } else if (kind == NodeProcess) {
+        emit processActivated(item->data(0, Qt::UserRole).toString());
+    }
+}
+
+void ProjectTree::rebuildProcesses(QTreeWidgetItem *group) {
+    if (!group || !m_project) return;
+    for (const auto &prc : m_project->processActivities()) {
+        auto *it = new QTreeWidgetItem(group, NodeProcess);
+        it->setText(0, prc->meta().title.isEmpty() ? prc->meta().id : prc->meta().title);
+        it->setForeground(0, QBrush(QColor("#c084fc")));   // purple for processes
+        it->setData(0, Qt::UserRole, prc->filePath());
     }
 }
 

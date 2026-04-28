@@ -25,6 +25,7 @@ public:
         NodeActivity,
         NodeForm,
         NodeSheet,
+        NodeProcess,
         NodeGenericLeaf
     };
 
@@ -44,6 +45,7 @@ signals:
     void formActivated(const QString &absoluteFormPath);
     void activityActivated(const QString &absoluteActivityPath);
     void sheetActivated(const QString &absoluteSheetPath);
+    void processActivated(const QString &absoluteProcessPath);
 
 private slots:
     void onContextMenu(const QPoint &p);
@@ -53,6 +55,7 @@ private:
     QTreeWidgetItem *addGroup(QTreeWidgetItem *parent, const QString &label, NodeKind kind);
     void rebuildAtomicActivities(QTreeWidgetItem *group);
     void rebuildSheets(QTreeWidgetItem *group);
+    void rebuildProcesses(QTreeWidgetItem *group);
     void rebuildList(QTreeWidgetItem *group, const QStringList &items);
 
     Project *m_project { nullptr };

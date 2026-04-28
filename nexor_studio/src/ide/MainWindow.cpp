@@ -22,8 +22,12 @@
 #include "dialogs/NewProjectDialog.h"
 #include "dialogs/NewActivityDialog.h"
 #include "dialogs/NewSheetDialog.h"
+#include "dialogs/NewProcessDialog.h"
 #include "sheet/SheetEditor.h"
+#include "process/ProcessEditor.h"
 #include "project/Sheet.h"
+#include "project/Process.h"
+#include "runtime/ProcessEngine.h"
 
 #include <QFileInfo>
 #include <QDir>
@@ -171,6 +175,12 @@ void MainWindow::setupUi() {
             this, &MainWindow::onActivityActivated);
     connect(m_projectTree, &ProjectTree::sheetActivated,
             this, &MainWindow::onSheetActivated);
+    connect(m_projectTree, &ProjectTree::processActivated,
+            this, &MainWindow::onProcessActivated);
+
+    // ProcessEditor's "▶ Run Process" button.
+    connect(m_central->processEditor(), &ProcessEditor::runRequested,
+            this, &MainWindow::onRunProcessRequested);
 
     // PropertyPanel "+ generate handler" button → insert stub into the form
     // code (in the editor if it's already showing this form's code; in the
@@ -515,8 +525,43 @@ void MainWindow::onNewAtomicActivity() {
 }
 
 void MainWindow::onNewProcessActivity() {
-    QMessageBox::information(this, "New Process Activity",
-        "Process activities will land in feature/process-activities.");
+    if (!m_project) {
+        QMessageBox::information(this, "New Process",
+            "Open or create a project first.");
+        return;
+    }
+    NewProcessDialog dlg(this);
+    if (dlg.exec() != QDialog::Accepted) return;
+    QString err;
+    auto prc = m_project->createProcess(dlg.meta(), &err);
+    if (!prc) {
+        QMessageBox::warning(this, "New Process", err);
+        return;
+    }
+    m_projectTree->refresh();
+    appendOutput(QString("Created process '%1' at %2")
+                    .arg(prc->meta().title, prc->filePath()), "#22c55e");
+    onProcessActivated(prc->filePath());
+}
+
+void MainWindow::onProcessActivated(const QString &absPath) {
+    if (!m_central->processEditor()->loadProcess(absPath)) {
+        appendOutput("Failed to read process: " + absPath, "#ef4444");
+        return;
+    }
+    appendOutput("Open process: " + absPath, "#c084fc");
+    m_central->showPage(CentralStack::PageProcess);
+    m_tabBar->setCurrentMode(FancyTabBar::ModeEdit);
+}
+
+void MainWindow::onRunProcessRequested(const QString &absPath) {
+    appendOutput("Run process: " + absPath, "#5b8cff");
+    bool ok = ProcessEngine::runProcess(absPath,
+        [this](const QString &line) { appendOutput(line, "#dce1e7"); },
+        [this](const QString &er)   { appendOutput("ERROR: " + er, "#ef4444"); },
+        m_project.get());
+    appendOutput(ok ? "Process finished." : "Process aborted.",
+                 ok ? "#22c55e" : "#ef4444");
 }
 
 void MainWindow::onNewSheet() {

@@ -3,6 +3,8 @@
 #include "Parser.h"
 #include "project/Project.h"
 #include "project/Sheet.h"
+#include "project/Process.h"
+#include "runtime/ProcessEngine.h"
 
 namespace nx {
 
@@ -58,6 +60,25 @@ void NexorRuntime::registerProjectSheets(const Project *project) {
             s.fields.append(rf);
         }
         m_interp->registerSheet(s);
+    }
+
+    // Each process becomes a callable handle:  OrderApproval.Start()
+    Interpreter *interp = m_interp.get();
+    for (const auto &prc : project->processActivities()) {
+        QString prcPath = prc->filePath();
+        // Capture by value so the runner remains valid for the lifetime
+        // of this NexorRuntime even if the Project is mutated.
+        const Project *pj = project;
+        interp->registerProcess(prc->meta().id,
+            [interp, prcPath, pj](const QVector<Value> &) -> Value {
+                // Pipe step Print + errors back through this interpreter's
+                // own callbacks so they end up in the same OUTPUT pane.
+                ProcessEngine::runProcess(prcPath,
+                    interp->output(),
+                    interp->errorOut(),
+                    pj);
+                return Value();
+            });
     }
 }
 

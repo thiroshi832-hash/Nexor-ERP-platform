@@ -16,6 +16,24 @@ void Interpreter::registerSheet(const SheetSchema &schema) {
     m_store.registerSheet(schema);
 }
 
+void Interpreter::registerProcess(const QString &name, ProcessRunner runner) {
+    if (name.isEmpty()) return;
+    m_processes.insert(name.toLower(), std::move(runner));
+}
+
+bool Interpreter::hasProcess(const QString &name) const {
+    return m_processes.contains(name.toLower());
+}
+
+// Returns a Value carrying the process name as a simple String holder.
+// kind="Process" + the lowercase-id stored as the object handle (we just use
+// a heap-allocated QString shared_ptr).  Member dispatch finds it via the
+// runner table on the Interpreter.
+static Value makeProcessRefValue(const QString &name) {
+    auto holder = std::make_shared<QString>(name);
+    return Value::object(holder, "Process");
+}
+
 // Pulls the sheet handle for a name, if registered.
 static Value makeSheetRefValue(const QString &id, EntityStore *store) {
     auto ref = std::make_shared<SheetRef>();
@@ -241,6 +259,8 @@ Value Interpreter::evalExpr(Expr *e, std::shared_ptr<Environment> env) {
         }
         // 3. Registered sheet name (Customer, Order, …) → SheetRef value.
         if (m_store.hasSheet(v->name)) return makeSheetRefValue(v->name, &m_store);
+        // 3b. Registered process name (OrderApproval, …) → ProcessRef value.
+        if (m_processes.contains(lo)) return makeProcessRefValue(v->name);
         // 4. No-arg user-defined sub.
         if (m_subs.contains(lo))     return call(v->name, {});
         // 5. No-arg built-in.
@@ -367,6 +387,17 @@ Value Interpreter::callMember(const Value &obj, const QString &name,
     // Form bridge — handle Form.Save / Form.Load / Form.New / etc.
     if (obj.kind() == Value::Object && obj.objectKind() == "Form") {
         return m_formHandler ? m_formHandler(name, args) : Value();
+    }
+    // Process bridge — handle <ProcessName>.Start() and friends.
+    if (obj.kind() == Value::Object && obj.objectKind() == "Process") {
+        auto holder = std::static_pointer_cast<QString>(obj.objectHandle());
+        if (!holder) return Value();
+        auto it = m_processes.find(holder->toLower());
+        if (it == m_processes.end()) return Value();
+        if (name.compare("Start", Qt::CaseInsensitive) == 0) {
+            return it.value()(args);
+        }
+        return Value();
     }
     QString lo = name.toLower();
 
