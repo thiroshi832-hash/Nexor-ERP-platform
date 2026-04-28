@@ -147,68 +147,98 @@ void FormCanvas::resizeEvent(QResizeEvent *) {
 }
 
 // ─── Painting (chrome only — widgets paint themselves) ──────────────────
+//
+// Faithful Windows 9x form look:
+//   - 1-px raised 3D bezel surrounding the entire form
+//   - Solid #000080-ish title bar (no gradient — Win95 default)
+//   - System-menu glyph at left, Min/Max/Close raised buttons at right
+//   - No footer status bar (status lives in the IDE shell, not the form)
+//
 void FormCanvas::paintEvent(QPaintEvent *) {
     QPainter p(this);
-    // Solid VB6-style workspace gray.
+    // VB6 MDI workspace gray.
     p.fillRect(rect(), QColor(0x80, 0x80, 0x80));
 
     if (m_path.isEmpty()) {
-        p.setPen(QColor(0xee, 0xee, 0xee));
-        QFont f = p.font(); f.setPointSize(13); f.setWeight(QFont::Normal);
-        f.setFamily("MS Sans Serif");
+        p.setPen(QColor(0xd0, 0xd0, 0xd0));
+        QFont f("MS Sans Serif", 11);
         p.setFont(f);
         p.drawText(rect(), Qt::AlignCenter,
                    "No form open.\nDouble-click a .frm in the project tree.");
         return;
     }
 
-    // Form chrome: classic-Windows blue gradient title bar above the body.
-    QRect chrome = formChromeRect();
-    QRect titleBar(chrome.left(), chrome.top(), chrome.width(), kTitleBarH);
-    QLinearGradient grad(titleBar.topLeft(), titleBar.topRight());
-    grad.setColorAt(0.0, QColor(0x0A, 0x24, 0x6A));   // deep blue
-    grad.setColorAt(1.0, QColor(0xA6, 0xCA, 0xF0));   // light blue
-    p.fillRect(titleBar, grad);
+    // ── 3D bezel around the entire form chrome (raised, button-face) ────
+    QRect chrome = formChromeRect();          // titlebar + body
+    QRect bezel  = chrome.adjusted(-2, -2, 1, 1);
 
-    QFont tf("MS Sans Serif", 9, QFont::Bold);
+    // Outer 1px highlight (top + left = white, bottom + right = black)
+    p.setPen(QColor(0xff, 0xff, 0xff));
+    p.drawLine(bezel.topLeft(),  QPoint(bezel.right(), bezel.top()));
+    p.drawLine(bezel.topLeft(),  QPoint(bezel.left(),  bezel.bottom()));
+    p.setPen(QColor(0x00, 0x00, 0x00));
+    p.drawLine(QPoint(bezel.right(), bezel.top()), bezel.bottomRight());
+    p.drawLine(QPoint(bezel.left(),  bezel.bottom()), bezel.bottomRight());
+
+    // Inner 1px (light face / dark shadow) — gives the raised effect
+    QRect inner = bezel.adjusted(1, 1, -1, -1);
+    p.setPen(QColor(0xdf, 0xdf, 0xdf));
+    p.drawLine(inner.topLeft(),  QPoint(inner.right(), inner.top()));
+    p.drawLine(inner.topLeft(),  QPoint(inner.left(),  inner.bottom()));
+    p.setPen(QColor(0x80, 0x80, 0x80));
+    p.drawLine(QPoint(inner.right(), inner.top()), inner.bottomRight());
+    p.drawLine(QPoint(inner.left(),  inner.bottom()), inner.bottomRight());
+
+    // ── Title bar (flat #0A246A — Win9x classic active blue) ────────────
+    QRect titleBar(chrome.left(), chrome.top(), chrome.width(), kTitleBarH);
+    p.fillRect(titleBar, QColor(0x0A, 0x24, 0x6A));
+
+    // System-menu glyph: small raised button at the left
+    int sys = kTitleBarH - 4;
+    QRect sysBox(titleBar.left() + 2, titleBar.top() + 2, sys, sys);
+    p.fillRect(sysBox, QColor(0xC0, 0xC0, 0xC0));
+    p.setPen(QColor(0xff, 0xff, 0xff));
+    p.drawLine(sysBox.topLeft(),  QPoint(sysBox.right(), sysBox.top()));
+    p.drawLine(sysBox.topLeft(),  QPoint(sysBox.left(),  sysBox.bottom()));
+    p.setPen(QColor(0x00, 0x00, 0x00));
+    p.drawLine(QPoint(sysBox.right(), sysBox.top()), sysBox.bottomRight());
+    p.drawLine(QPoint(sysBox.left(),  sysBox.bottom()), sysBox.bottomRight());
+    // Inside: a thick horizontal bar (≡ classic system menu glyph)
+    p.setPen(QColor(0x00, 0x00, 0x00));
+    int gy = sysBox.center().y();
+    p.drawLine(sysBox.left() + 3, gy - 1, sysBox.right() - 3, gy - 1);
+    p.drawLine(sysBox.left() + 3, gy,     sysBox.right() - 3, gy);
+
+    // Title text
+    QFont tf("MS Sans Serif", 8, QFont::Bold);
     p.setFont(tf);
     p.setPen(QColor(0xff, 0xff, 0xff));
-    p.drawText(titleBar.adjusted(8, 0, -78, 0),
+    int textL = sysBox.right() + 4;
+    int textR = titleBar.right() - (3 * (sys + 2)) - 4;     // room for 3 buttons
+    p.drawText(QRect(textL, titleBar.top(), textR - textL, titleBar.height()),
                Qt::AlignVCenter | Qt::AlignLeft, m_title);
 
-    // Window controls — three classic 22 px boxes (− □ ×)
-    int boxW = 22, gap = 2;
-    int xRight = titleBar.right() - 4;
-    auto drawCtl = [&](const QString &g, const QColor &fill = QColor()) {
-        QRect r(xRight - boxW, titleBar.top() + 4, boxW, kTitleBarH - 8);
-        p.fillRect(r, fill.isValid() ? fill : QColor(0xC0, 0xC0, 0xC0));
+    // ── Window controls: 3 raised buttons (− □ ×) at top-right ──────────
+    int btn = kTitleBarH - 4;
+    int xR  = titleBar.right() - 2;
+    auto drawCtl = [&](const QString &glyph) {
+        QRect r(xR - btn, titleBar.top() + 2, btn, btn);
+        p.fillRect(r, QColor(0xC0, 0xC0, 0xC0));
+        p.setPen(QColor(0xff, 0xff, 0xff));
+        p.drawLine(r.topLeft(), QPoint(r.right(), r.top()));
+        p.drawLine(r.topLeft(), QPoint(r.left(),  r.bottom()));
         p.setPen(QColor(0x00, 0x00, 0x00));
-        QFont bf("MS Sans Serif", 9);
-        p.setFont(bf);
-        p.drawText(r, Qt::AlignCenter, g);
-        xRight -= (boxW + gap);
+        p.drawLine(QPoint(r.right(), r.top()), r.bottomRight());
+        p.drawLine(QPoint(r.left(),  r.bottom()), r.bottomRight());
+        QFont gf("MS Sans Serif", 7, QFont::Bold);
+        p.setFont(gf);
+        p.setPen(QColor(0x00, 0x00, 0x00));
+        p.drawText(r, Qt::AlignCenter, glyph);
+        xR -= (btn + 1);
     };
-    drawCtl(QStringLiteral("✕"), QColor(0xC0, 0xC0, 0xC0));   // ×
-    drawCtl(QStringLiteral("□"));                              // □
-    drawCtl(QStringLiteral("–"));                              // –
-
-    // Footer status — light gray bar with classic black text.
-    QRect footer(0, height() - 22, width(), 22);
-    p.fillRect(footer, QColor(0xF0, 0xF0, 0xF0));
-    p.setPen(QColor(0x80, 0x80, 0x80));
-    p.drawLine(footer.topLeft(), footer.topRight());
-    p.setPen(QColor(0x00, 0x00, 0x00));
-    QFont ff("MS Sans Serif", 8);
-    p.setFont(ff);
-    QString left  = QString("  %1").arg(m_path);
-    QString right = QString("%1 × %2  ·  %3 widgets  ")
-                      .arg(m_formW).arg(m_formH).arg(m_items.size());
-    QFontMetrics fm(ff);
-    int rw = fm.horizontalAdvance(right);
-    p.drawText(footer.adjusted(0, 0, -rw, 0), Qt::AlignVCenter | Qt::AlignLeft,
-               fm.elidedText(left, Qt::ElideMiddle, footer.width() - rw - 12));
-    p.drawText(footer.adjusted(footer.width() - rw, 0, 0, 0),
-               Qt::AlignVCenter | Qt::AlignLeft, right);
+    drawCtl(QStringLiteral("X"));   // close
+    drawCtl(QStringLiteral("□"));   // maximize
+    drawCtl(QStringLiteral("_"));   // minimize
 }
 
 // ─── Drop handling ─────────────────────────────────────────────────────

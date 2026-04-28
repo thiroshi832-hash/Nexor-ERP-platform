@@ -138,8 +138,8 @@ private:
     QRect snapRect(const QRect &r) const;
     QRect snapMove(const QRect &r) const;
 
-    // ── Visual chrome constants ──────────────────────────────────────────
-    static constexpr int kTitleBarH = 28;
+    // ── Visual chrome constants (VB6 / Windows 9x sizes) ─────────────────
+    static constexpr int kTitleBarH = 19;   // classic Win9x active title bar
     static constexpr int kPadding   = 30;
 
     // ── Children ─────────────────────────────────────────────────────────
