@@ -25,8 +25,9 @@ public:
     Value call(const QString &name, const QVector<Value> &args = {});
     bool  hasSub(const QString &name) const;
 
-    // Registers every sheet in a Project so the language can see them as
-    // first-class entity types (Customer.Find(1) etc.).  Idempotent.
+    // Opens the project's SQLite database (creating it if needed) and
+    // registers every sheet schema.  After this call, user code can refer
+    // to entities by name (Customer.Find(1) etc.) and changes persist.
     void registerProjectSheets(const Project *project);
 
     void setOutput(Interpreter::OutputCallback cb) { m_interp->setOutput(std::move(cb)); }
