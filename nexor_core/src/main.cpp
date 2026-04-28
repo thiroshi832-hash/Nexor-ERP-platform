@@ -19,6 +19,7 @@
 #include "RpcApi.h"
 #include "EntityApi.h"
 #include "CoreEntityStore.h"
+#include "ProcessApi.h"
 #include "../../nexor_studio/src/build/PackageReader.h"
 #include <QFile>
 
@@ -100,6 +101,14 @@ int main(int argc, char *argv[]) {
     entityApi.setAdminToken(adminToken);
     entityApi.registerRoutes();
 
+    nx::ProcessApi procApi(&router, &registry);
+    if (!procApi.open(dataRoot, &err)) {
+        qCritical().noquote() << "NexorCore: process store open failed —" << err;
+        return 4;
+    }
+    procApi.setAdminToken(adminToken);
+    procApi.registerRoutes();
+
     nx::HttpServer server(&router);
     if (!server.start(port)) {
         qCritical().noquote() << "NexorCore: cannot bind port" << port;
@@ -118,6 +127,10 @@ int main(int argc, char *argv[]) {
     qInfo().noquote() << "  GET  /api/v1/entities/:sheet[/:id]";
     qInfo().noquote() << "  POST /api/v1/entities/:sheet";
     qInfo().noquote() << "  PATCH/DELETE /api/v1/entities/:sheet/:id";
+    qInfo().noquote() << "  POST /api/v1/processes/:package/:process/start";
+    qInfo().noquote() << "  POST /api/v1/processes/:instance/resume";
+    qInfo().noquote() << "  GET  /api/v1/processes[?status=...]";
+    qInfo().noquote() << "  GET  /api/v1/processes/:instance";
     qInfo().noquote() << QString("  signing-key : %1").arg(
         signingKey.isEmpty() ? "<permissive>" : "<set>");
     qInfo().noquote() << QString("  admin-token : %1").arg(

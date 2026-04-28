@@ -20,6 +20,9 @@ SOURCES += \
     src/ValueJson.cpp \
     src/EntityApi.cpp \
     src/CoreEntityStore.cpp \
+    src/ProcessApi.cpp \
+    \
+    ../nexor_studio/src/runtime/ProcessEngine.cpp \
     \
     ../nexor_studio/src/build/PackageReader.cpp \
     ../nexor_studio/src/build/PackageDiff.cpp \
@@ -46,6 +49,9 @@ HEADERS += \
     src/ValueJson.h \
     src/EntityApi.h \
     src/CoreEntityStore.h \
+    src/ProcessApi.h \
+    \
+    ../nexor_studio/src/runtime/ProcessEngine.h \
     \
     ../nexor_studio/src/build/Package.h \
     ../nexor_studio/src/build/PackageReader.h \

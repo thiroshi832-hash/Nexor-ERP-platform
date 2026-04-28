@@ -4,7 +4,9 @@
 #include "project/Activity.h"
 #include "language/NexorRuntime.h"
 #include "language/Interpreter.h"
-#include "runtime/FormRunner.h"
+#if defined(NEXOR_HAS_WIDGETS)
+#  include "runtime/FormRunner.h"
+#endif
 
 #include <QDir>
 #include <QFileInfo>
@@ -118,6 +120,7 @@ bool runLoaded(const Process &p,
         QString lower = st.type.toLower();
 
         if (lower == "humantask") {
+#if defined(NEXOR_HAS_WIDGETS)
             QString formPath = resolveFormPath(st.formId, prcDir, project);
             if (formPath.isEmpty()) {
                 if (err) err(QString("HumanTask step '%1' references unknown form '%2'.")
@@ -126,6 +129,16 @@ bool runLoaded(const Process &p,
             }
             bool accepted = FormRunner::runFormModal(formPath, nullptr,
                                                      out, err, project);
+#else
+            // Synchronous engine on a host without QtWidgets - HumanTask
+            // can't open a modal form here; the caller should be using
+            // runHeadless() instead.
+            if (err) err(QString("HumanTask in synchronous engine without QtWidgets - "
+                                  "use runHeadless on this host."));
+            return false;
+            bool accepted = false;
+            (void)accepted;
+#endif
             if (!accepted) {
                 if (out) out(QString("Process: HumanTask '%1' rejected — aborting.")
                                  .arg(st.id));
@@ -223,4 +236,142 @@ bool ProcessEngine::runProcess(const Process &process,
         ? QString("<process:%1>").arg(process.meta().id)
         : QFileInfo(process.filePath()).fileName();
     return runLoaded(process, std::move(out), std::move(err), project, unit);
+}
+
+ProcessEngine::StepResult
+ProcessEngine::runHeadless(const Process &process,
+                           const QString &startStepId,
+                           const Vars    &vars,
+                           OutputFn out, OutputFn err,
+                           const Project *project) {
+    StepResult result;
+
+    if (process.steps().isEmpty()) {
+        result.state = RunState::Failed;
+        result.lastError = "Process has no steps.";
+        return result;
+    }
+    int idx = startStepId.isEmpty() ? process.startIndex()
+                                    : process.indexOfStep(startStepId);
+    if (idx < 0) {
+        result.state = RunState::Failed;
+        result.lastError = "Unknown start step: " + startStepId;
+        return result;
+    }
+
+    nx::NexorRuntime rt;
+    if (out) rt.setOutput(out);
+    if (err) rt.setError(err);
+    if (project) rt.registerProjectSheets(project);
+
+    QString unit = process.filePath().isEmpty()
+        ? QString("<process:%1>").arg(process.meta().id)
+        : QFileInfo(process.filePath()).fileName();
+    QString src;
+    {
+        // Mirror buildModuleSource - private to this TU but trivial enough
+        // to inline here so we don't rip the helper out of the anonymous
+        // namespace.
+        for (const StepSpec &st : process.steps()) {
+            bool isChoice = st.type.compare("Choice", Qt::CaseInsensitive) == 0;
+            src += QString("%1 __Step_%2()\n")
+                       .arg(isChoice ? "Function" : "Sub", st.id);
+            src += st.code;
+            if (!st.code.endsWith('\n')) src += '\n';
+            src += isChoice ? "End Function\n\n" : "End Sub\n\n";
+        }
+    }
+    if (!rt.compile(src, unit)) {
+        result.state = RunState::Failed;
+        result.lastError = "compile error: " + rt.lastError();
+        return result;
+    }
+
+    // Seed the var store with the caller's bag.
+    nx::Interpreter::VarStore store;
+    for (auto it = vars.constBegin(); it != vars.constEnd(); ++it)
+        store.insert(it.key().toLower(), it.value());
+    rt.interpreter()->setVarStore(&store);
+
+    int safety = 1024;
+    while (idx >= 0 && idx < process.steps().size() && safety-- > 0) {
+        const StepSpec &st = process.steps().at(idx);
+        QString sub = "__Step_" + st.id;
+        QString lower = st.type.toLower();
+
+        if (lower == "humantask") {
+            // Suspend BEFORE running the body.  The body runs after the
+            // user closes the form and the caller resumes us.
+            result.state          = RunState::AwaitingHuman;
+            result.awaitingStepId = st.id;
+            result.awaitingFormId = st.formId;
+            // Snapshot var store back out for persistence.
+            for (auto it = store.constBegin(); it != store.constEnd(); ++it)
+                result.vars.insert(it.key(), it.value());
+            return result;
+        }
+
+        if (lower == "choice") {
+            if (!rt.hasSub(sub)) {
+                result.state = RunState::Failed;
+                result.lastError = QString("Choice step '%1' has no body.").arg(st.id);
+                return result;
+            }
+            nx::Value rv = rt.call(sub);
+            if (rt.hadError()) {
+                result.state = RunState::Failed;
+                result.lastError = rt.lastError();
+                return result;
+            }
+            QString returnValue = rv.toText().trimmed();
+            QString target;
+            if (!st.branches.isEmpty()) {
+                for (const auto &b : st.branches) {
+                    if (b.returnValue.compare(returnValue, Qt::CaseInsensitive) == 0) {
+                        target = b.targetId;
+                        break;
+                    }
+                }
+                if (target.isEmpty()) target = st.nextId;
+            } else {
+                target = returnValue.isEmpty() ? st.nextId : returnValue;
+            }
+            if (target.isEmpty()) break;          // implicit terminate
+            int next = process.indexOfStep(target);
+            if (next < 0) {
+                result.state = RunState::Failed;
+                result.lastError =
+                    QString("Choice step '%1' returned unknown target '%2'.")
+                        .arg(st.id, target);
+                return result;
+            }
+            idx = next;
+            continue;
+        }
+
+        // Server / Final / unknown - run the body, then advance.
+        if (rt.hasSub(sub)) {
+            rt.call(sub);
+            if (rt.hadError()) {
+                result.state = RunState::Failed;
+                result.lastError = rt.lastError();
+                return result;
+            }
+        }
+        if (lower == "final") break;
+        if (st.nextId.isEmpty()) break;
+        idx = process.indexOfStep(st.nextId);
+        if (idx < 0) {
+            result.state = RunState::Failed;
+            result.lastError =
+                QString("Step '%1' references missing next step '%2'.")
+                    .arg(st.id, st.nextId);
+            return result;
+        }
+    }
+
+    result.state = RunState::Completed;
+    for (auto it = store.constBegin(); it != store.constEnd(); ++it)
+        result.vars.insert(it.key(), it.value());
+    return result;
 }
