@@ -13,14 +13,16 @@ SOURCES += \
     src/Http.cpp \
     src/PackageRegistry.cpp \
     src/PackageApi.cpp \
-    ../nexor_studio/src/build/PackageReader.cpp
+    ../nexor_studio/src/build/PackageReader.cpp \
+    ../nexor_studio/src/build/PackageDiff.cpp
 
 HEADERS += \
     src/Http.h \
     src/PackageRegistry.h \
     src/PackageApi.h \
     ../nexor_studio/src/build/Package.h \
-    ../nexor_studio/src/build/PackageReader.h
+    ../nexor_studio/src/build/PackageReader.h \
+    ../nexor_studio/src/build/PackageDiff.h
 
 DESTDIR     = $$PWD/../bin
 OBJECTS_DIR = $$PWD/build/obj

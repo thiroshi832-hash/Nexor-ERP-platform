@@ -84,7 +84,10 @@ std::shared_ptr<Process> Project::createProcess(const ProcessMeta &meta, QString
     }
 
     QString prcDir  = root + "/processes/" + meta.id;
-    QString prcPath = prcDir + "/" + meta.id + ".prc";
+    // BPMN 2.0 (.bpmn) is the canonical format from Phase 12 onward.  Any
+    // existing .prc files still load via the legacy reader, so older
+    // projects keep working unchanged.
+    QString prcPath = prcDir + "/" + meta.id + ".bpmn";
     if (!QDir().mkpath(prcDir)) {
         if (errorOut) *errorOut = "Could not create process directory: " + prcDir;
         return nullptr;

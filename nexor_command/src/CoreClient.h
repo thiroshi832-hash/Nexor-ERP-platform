@@ -29,6 +29,38 @@ struct PackageRow {
     qint64  byteSize { 0 };
 };
 
+struct AuditRow {
+    qint64  id { 0 };
+    QString eventType;
+    QString packageId, version;
+    QString actor;
+    QString detail;
+    QString occurredAt;
+};
+
+struct DiffEntry {
+    QString kind;          // "added" | "removed" | "changed" | "unchanged"
+    QString section;
+    QString id;
+    QString fromHash, toHash;
+};
+
+struct SheetFieldDiff {
+    QString kind;          // "added" | "removed" | "type-changed" | "flags-changed"
+    QString name, fromType, toType, detail;
+};
+
+struct SheetDiff {
+    QString sheetId;
+    QVector<SheetFieldDiff> fields;
+};
+
+struct DiffResult {
+    QString fromVersion, toVersion;
+    QVector<DiffEntry> entries;
+    QVector<SheetDiff> sheets;
+};
+
 class CoreClient : public QObject {
     Q_OBJECT
 public:
@@ -41,25 +73,39 @@ public:
     QString adminToken() const { return m_token; }
 
     void listPackages(const QString &statusFilter = QString());
-    void deploy      (const QString &id, const QString &version);
-    void rollback    (const QString &id, const QString &version);
-    void checkHealth ();
+    void deploy        (const QString &id, const QString &version);
+    void rollback      (const QString &id, const QString &version);
+    void deletePending (const QString &id, const QString &version);
+    void historyOf     (const QString &id);
+    void auditLog      (const QString &packageId = QString());
+    void diff          (const QString &id, const QString &from, const QString &to);
+    void downloadTo    (const QString &id, const QString &version,
+                        const QString &localPath);
+    void checkHealth   ();
 
 signals:
-    void packagesReceived(const QVector<PackageRow> &rows);
+    void packagesReceived (const QVector<PackageRow> &rows);
+    void historyReceived  (const QString &id, const QVector<PackageRow> &rows);
+    void auditReceived    (const QVector<AuditRow> &events);
+    void diffReceived     (const DiffResult &diff);
+    void downloadFinished (const QString &id, const QString &version,
+                           bool ok, const QString &localPath, const QString &message);
     void operationFinished(const QString &op, bool ok, const QString &message);
-    void healthReceived  (bool reachable, const QString &info);
+    void healthReceived   (bool reachable, const QString &info);
 
 private:
     QNetworkAccessManager *m_nam;
     QString                m_baseUrl;
     QString                m_token;
 
-    QNetworkReply *get  (const QString &path, bool authed);
-    QNetworkReply *post (const QString &path, bool authed,
-                         const QByteArray &body = {},
-                         const QString &contentType = "application/json");
-    static PackageRow rowFromJson(const QJsonObject &o);
+    QNetworkReply *get      (const QString &path, bool authed);
+    QNetworkReply *post     (const QString &path, bool authed,
+                             const QByteArray &body = {},
+                             const QString &contentType = "application/json");
+    QNetworkReply *deleteRq (const QString &path, bool authed);
+    static PackageRow rowFromJson  (const QJsonObject &o);
+    static AuditRow   auditFromJson(const QJsonObject &o);
+    static DiffResult diffFromJson (const QJsonDocument &doc);
 };
 
 } // namespace nx

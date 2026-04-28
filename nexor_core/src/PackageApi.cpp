@@ -1,11 +1,14 @@
 #include "PackageApi.h"
 #include "Http.h"
 #include "PackageRegistry.h"
+#include "../../nexor_studio/src/build/PackageReader.h"
+#include "../../nexor_studio/src/build/PackageDiff.h"
 
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QUrlQuery>
+#include <QFile>
 
 namespace nx {
 
@@ -28,6 +31,29 @@ QJsonObject recordToJson(const RegistryRecord &r) {
     o.insert("byte_size",   static_cast<qint64>(r.byteSize));
     o.insert("status",      r.status);
     return o;
+}
+
+QJsonObject auditToJson(const AuditEvent &e) {
+    QJsonObject o;
+    o.insert("id",          e.id);
+    o.insert("event_type",  e.eventType);
+    o.insert("package_id",  e.packageId);
+    o.insert("version",     e.packageVersion);
+    o.insert("actor",       e.actor);
+    o.insert("detail",      e.detail);
+    o.insert("occurred_at", e.occurredAt.toUTC().toString(Qt::ISODate));
+    return o;
+}
+
+// Identity tag for the audit log: last 6 chars of the bearer token (so the
+// log doesn't store the secret in clear), or "<anon>" when unauthenticated.
+QString actorOf(const HttpRequest &req) {
+    QString h = req.header("Authorization");
+    QString prefix = "Bearer ";
+    if (!h.startsWith(prefix, Qt::CaseInsensitive)) return "<anon>";
+    QString tok = h.mid(prefix.size()).trimmed();
+    if (tok.isEmpty()) return "<anon>";
+    return tok.size() > 6 ? "…" + tok.right(6) : tok;
 }
 
 // Bearer-token check.  Returns true when the request carries a matching
@@ -83,7 +109,7 @@ void PackageApi::registerRoutes() {
             }
             RegistryRecord rec;
             QString err;
-            if (!reg->publish(req.body, rec, &err)) {
+            if (!reg->publish(req.body, actorOf(req), rec, &err)) {
                 res.setStatus(400, "Bad Request");
                 res.setJson(jsonError(err));
                 return;
@@ -135,7 +161,7 @@ void PackageApi::registerRoutes() {
             QString id  = req.pathParams.value("id");
             QString ver = req.pathParams.value("version");
             QString err;
-            if (!reg->deploy(id, ver, &err)) {
+            if (!reg->deploy(id, ver, actorOf(req), &err)) {
                 res.setStatus(400, "Bad Request");
                 res.setJson(jsonError(err));
                 return;
@@ -154,7 +180,7 @@ void PackageApi::registerRoutes() {
             QString id  = req.pathParams.value("id");
             QString ver = req.pathParams.value("version");
             QString err;
-            if (!reg->rollback(id, ver, &err)) {
+            if (!reg->rollback(id, ver, actorOf(req), &err)) {
                 res.setStatus(400, "Bad Request");
                 res.setJson(jsonError(err));
                 return;
@@ -163,6 +189,121 @@ void PackageApi::registerRoutes() {
             reg->find(id, ver, r);
             res.setJson(QJsonDocument(recordToJson(r))
                             .toJson(QJsonDocument::Compact));
+        });
+
+    // DELETE /api/v1/admin/packages/:id/:version
+    //   200 on success; only allowed when the version is "pending".
+    m_router->route("DELETE", "/api/v1/admin/packages/:id/:version",
+        [reg = m_registry, tok = m_adminToken](const HttpRequest &req,
+                                                HttpResponse &res) {
+            if (!checkBearer(req, tok, res)) return;
+            QString id  = req.pathParams.value("id");
+            QString ver = req.pathParams.value("version");
+            QString err;
+            if (!reg->deletePending(id, ver, actorOf(req), &err)) {
+                res.setStatus(400, "Bad Request");
+                res.setJson(jsonError(err));
+                return;
+            }
+            QJsonObject o; o.insert("ok", true);
+            o.insert("id", id); o.insert("version", ver);
+            res.setJson(QJsonDocument(o).toJson(QJsonDocument::Compact));
+        });
+
+    // GET /api/v1/admin/packages/:id/history — every row for one project.
+    m_router->route("GET", "/api/v1/admin/packages/:id/history",
+        [reg = m_registry, tok = m_adminToken](const HttpRequest &req,
+                                                HttpResponse &res) {
+            if (!checkBearer(req, tok, res)) return;
+            QString id = req.pathParams.value("id");
+            QJsonArray arr;
+            for (const auto &r : reg->listByPackage(id)) arr.append(recordToJson(r));
+            res.setJson(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+        });
+
+    // GET /api/v1/admin/audit[?package=…]
+    m_router->route("GET", "/api/v1/admin/audit",
+        [reg = m_registry, tok = m_adminToken](const HttpRequest &req,
+                                                HttpResponse &res) {
+            if (!checkBearer(req, tok, res)) return;
+            QUrlQuery qq(req.query);
+            QString pkg = qq.queryItemValue("package");
+            QJsonArray arr;
+            for (const auto &e : reg->audit(pkg, 500)) arr.append(auditToJson(e));
+            res.setJson(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+        });
+
+    // GET /api/v1/admin/packages/:id/diff?from=A&to=B
+    m_router->route("GET", "/api/v1/admin/packages/:id/diff",
+        [reg = m_registry, tok = m_adminToken](const HttpRequest &req,
+                                                HttpResponse &res) {
+            if (!checkBearer(req, tok, res)) return;
+            QString id = req.pathParams.value("id");
+            QUrlQuery qq(req.query);
+            QString fromV = qq.queryItemValue("from");
+            QString toV   = qq.queryItemValue("to");
+            if (fromV.isEmpty() || toV.isEmpty()) {
+                res.setStatus(400, "Bad Request");
+                res.setJson(jsonError("Both `from` and `to` query parameters are required."));
+                return;
+            }
+            QByteArray fromBytes = reg->read(id, fromV);
+            QByteArray toBytes   = reg->read(id, toV);
+            if (fromBytes.isEmpty() || toBytes.isEmpty()) {
+                res.setStatus(404, "Not Found");
+                res.setJson(jsonError("One or both versions are missing."));
+                return;
+            }
+            auto fromR = PackageReader::fromBytes(fromBytes, /*verifyHash*/false);
+            auto toR   = PackageReader::fromBytes(toBytes,   /*verifyHash*/false);
+            if (fromR.status != PackageReader::Status::Ok ||
+                toR.status   != PackageReader::Status::Ok) {
+                res.setStatus(500, "Internal Server Error");
+                res.setJson(jsonError("Stored package failed to parse."));
+                return;
+            }
+            PackageDiff diff = PackageDiffer::compute(fromR.package, toR.package);
+
+            QJsonArray entries;
+            for (const auto &c : diff.entries) {
+                QJsonObject o;
+                o.insert("kind",
+                    c.kind == EntryChange::Added     ? "added" :
+                    c.kind == EntryChange::Removed   ? "removed" :
+                    c.kind == EntryChange::Changed   ? "changed" : "unchanged");
+                o.insert("section",   c.section);
+                o.insert("id",        c.id);
+                o.insert("from_hash", c.fromHash);
+                o.insert("to_hash",   c.toHash);
+                entries.append(o);
+            }
+            QJsonArray sheets;
+            for (const auto &s : diff.sheets) {
+                QJsonArray fields;
+                for (const auto &f : s.fields) {
+                    QJsonObject fo;
+                    fo.insert("kind",
+                        f.kind == SheetFieldChange::Added        ? "added" :
+                        f.kind == SheetFieldChange::Removed      ? "removed" :
+                        f.kind == SheetFieldChange::TypeChanged  ? "type-changed"
+                                                                  : "flags-changed");
+                    fo.insert("name",      f.fieldName);
+                    fo.insert("from_type", f.fromType);
+                    fo.insert("to_type",   f.toType);
+                    fo.insert("detail",    f.detail);
+                    fields.append(fo);
+                }
+                QJsonObject so;
+                so.insert("sheet_id", s.sheetId);
+                so.insert("fields",   fields);
+                sheets.append(so);
+            }
+            QJsonObject root;
+            root.insert("from",    fromV);
+            root.insert("to",      toV);
+            root.insert("entries", entries);
+            root.insert("sheets",  sheets);
+            res.setJson(QJsonDocument(root).toJson(QJsonDocument::Compact));
         });
 }
 

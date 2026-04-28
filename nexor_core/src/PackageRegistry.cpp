@@ -46,7 +46,7 @@ bool PackageRegistry::open(QString *error) {
 
 bool PackageRegistry::ensureSchema(QString *error) {
     QSqlQuery q(m_db);
-    const QString ddl =
+    if (!q.exec(
         "CREATE TABLE IF NOT EXISTS package_versions ("
         "  id          TEXT NOT NULL,"
         "  version     TEXT NOT NULL,"
@@ -59,15 +59,51 @@ bool PackageRegistry::ensureSchema(QString *error) {
         "  file_path   TEXT NOT NULL,"
         "  status      TEXT NOT NULL,"
         "  PRIMARY KEY (id, version)"
-        ")";
-    if (!q.exec(ddl)) {
-        if (error) *error = "DDL failed: " + q.lastError().text();
+        ")")) {
+        if (error) *error = "DDL pkg failed: " + q.lastError().text();
+        return false;
+    }
+    if (!q.exec(
+        "CREATE TABLE IF NOT EXISTS audit_events ("
+        "  id          INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  event_type  TEXT NOT NULL,"     // publish | deploy | rollback | delete-pending
+        "  package_id  TEXT NOT NULL,"
+        "  package_ver TEXT NOT NULL,"
+        "  actor       TEXT,"              // bearer token suffix or '<anon>'
+        "  detail      TEXT,"
+        "  occurred_at TEXT NOT NULL"
+        ")")) {
+        if (error) *error = "DDL audit failed: " + q.lastError().text();
+        return false;
+    }
+    if (!q.exec(
+        "CREATE INDEX IF NOT EXISTS audit_pkg_idx"
+        " ON audit_events(package_id, occurred_at DESC)")) {
+        if (error) *error = "DDL idx failed: " + q.lastError().text();
         return false;
     }
     return true;
 }
 
+void PackageRegistry::recordAudit(const QString &eventType,
+                                  const QString &id, const QString &version,
+                                  const QString &actor, const QString &detail) {
+    if (!m_open) return;
+    QSqlQuery q(m_db);
+    q.prepare("INSERT INTO audit_events"
+              "  (event_type, package_id, package_ver, actor, detail, occurred_at)"
+              "  VALUES (:t,:i,:v,:a,:d,:o)");
+    q.bindValue(":t", eventType);
+    q.bindValue(":i", id);
+    q.bindValue(":v", version);
+    q.bindValue(":a", actor.isEmpty() ? QString("<anon>") : actor);
+    q.bindValue(":d", detail);
+    q.bindValue(":o", QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+    q.exec();   // best-effort; audit failures should not block the action
+}
+
 bool PackageRegistry::publish(const QByteArray &bytes,
+                              const QString &actor,
                               RegistryRecord &outRecord,
                               QString *error) {
     if (!m_open) { if (error) *error = "Registry not open."; return false; }
@@ -154,6 +190,8 @@ bool PackageRegistry::publish(const QByteArray &bytes,
     outRecord.receivedAt = now;
     outRecord.filePath   = filePath;
     outRecord.status     = "pending";
+    recordAudit("publish", outRecord.id, outRecord.version, actor,
+                QString("hash=%1 size=%2").arg(outRecord.hash).arg(bytes.size()));
     return true;
 }
 
@@ -192,7 +230,7 @@ QVector<RegistryRecord> PackageRegistry::list(const QString &statusFilter) const
 }
 
 bool PackageRegistry::deploy(const QString &id, const QString &version,
-                             QString *error) {
+                             const QString &actor, QString *error) {
     if (!m_open) { if (error) *error = "Registry not open."; return false; }
     RegistryRecord cur;
     if (!find(id, version, cur)) {
@@ -220,11 +258,13 @@ bool PackageRegistry::deploy(const QString &id, const QString &version,
         if (error) *error = "Promote step failed: " + up.lastError().text();
         return false;
     }
+    recordAudit("deploy", id, version, actor,
+                QString("from=%1 to=live").arg(cur.status));
     return true;
 }
 
 bool PackageRegistry::rollback(const QString &id, const QString &version,
-                               QString *error) {
+                               const QString &actor, QString *error) {
     if (!m_open) { if (error) *error = "Registry not open."; return false; }
     RegistryRecord cur;
     if (!find(id, version, cur)) {
@@ -244,7 +284,87 @@ bool PackageRegistry::rollback(const QString &id, const QString &version,
         if (error) *error = "Rollback failed: " + q.lastError().text();
         return false;
     }
+    recordAudit("rollback", id, version, actor, "from=live to=rolled_back");
     return true;
+}
+
+bool PackageRegistry::deletePending(const QString &id, const QString &version,
+                                    const QString &actor, QString *error) {
+    if (!m_open) { if (error) *error = "Registry not open."; return false; }
+    RegistryRecord cur;
+    if (!find(id, version, cur)) {
+        if (error) *error = "No such package version.";
+        return false;
+    }
+    if (cur.status != "pending") {
+        if (error) *error = "Only pending versions can be deleted.";
+        return false;
+    }
+    QFile::remove(cur.filePath);
+    QSqlQuery q(m_db);
+    q.prepare("DELETE FROM package_versions WHERE id=:id AND version=:ver");
+    q.bindValue(":id", id); q.bindValue(":ver", version);
+    if (!q.exec()) {
+        if (error) *error = "DB delete failed: " + q.lastError().text();
+        return false;
+    }
+    recordAudit("delete-pending", id, version, actor,
+                QString("hash=%1").arg(cur.hash));
+    return true;
+}
+
+QVector<RegistryRecord> PackageRegistry::listByPackage(const QString &id) const {
+    QVector<RegistryRecord> out;
+    if (!m_open) return out;
+    QSqlQuery q(m_db);
+    q.prepare("SELECT id, version, title, built_at, hash, hash_algo, byte_size,"
+              "       received_at, file_path, status"
+              "  FROM package_versions WHERE id=:id"
+              " ORDER BY received_at DESC");
+    q.bindValue(":id", id);
+    if (!q.exec()) return out;
+    while (q.next()) {
+        RegistryRecord r;
+        r.id         = q.value(0).toString();
+        r.version    = q.value(1).toString();
+        r.title      = q.value(2).toString();
+        r.builtAt    = QDateTime::fromString(q.value(3).toString(), Qt::ISODate);
+        r.hash       = q.value(4).toString();
+        r.hashAlgo   = q.value(5).toString();
+        r.byteSize   = q.value(6).toLongLong();
+        r.receivedAt = QDateTime::fromString(q.value(7).toString(), Qt::ISODate);
+        r.filePath   = q.value(8).toString();
+        r.status     = q.value(9).toString();
+        out.append(r);
+    }
+    return out;
+}
+
+QVector<AuditEvent> PackageRegistry::audit(const QString &packageId,
+                                           int limit) const {
+    QVector<AuditEvent> out;
+    if (!m_open) return out;
+    QSqlQuery q(m_db);
+    QString sql = "SELECT id, event_type, package_id, package_ver, actor, detail,"
+                  "       occurred_at FROM audit_events";
+    if (!packageId.isEmpty()) sql += " WHERE package_id = :id";
+    sql += " ORDER BY occurred_at DESC, id DESC LIMIT :limit";
+    q.prepare(sql);
+    if (!packageId.isEmpty()) q.bindValue(":id", packageId);
+    q.bindValue(":limit", limit > 0 ? limit : 500);
+    if (!q.exec()) return out;
+    while (q.next()) {
+        AuditEvent e;
+        e.id             = q.value(0).toLongLong();
+        e.eventType      = q.value(1).toString();
+        e.packageId      = q.value(2).toString();
+        e.packageVersion = q.value(3).toString();
+        e.actor          = q.value(4).toString();
+        e.detail         = q.value(5).toString();
+        e.occurredAt     = QDateTime::fromString(q.value(6).toString(), Qt::ISODate);
+        out.append(e);
+    }
+    return out;
 }
 
 bool PackageRegistry::find(const QString &id, const QString &version,

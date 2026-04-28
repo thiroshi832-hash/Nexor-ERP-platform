@@ -53,6 +53,19 @@ struct RegistryRecord {
     QString   status;          // "pending" | "live" | "rolled_back"
 };
 
+// One row of the append-only audit log.  Every state-changing endpoint
+// (publish / deploy / rollback / delete) records one of these so the admin
+// has a complete who-did-what timeline.
+struct AuditEvent {
+    qint64    id { 0 };
+    QString   eventType;       // "publish" | "deploy" | "rollback" | "delete-pending"
+    QString   packageId;
+    QString   packageVersion;
+    QString   actor;           // bearer token, or "<anonymous>"
+    QString   detail;          // free text; usually a short JSON blob
+    QDateTime occurredAt;
+};
+
 class PackageRegistry {
 public:
     explicit PackageRegistry(const QString &dataRoot);
@@ -73,24 +86,38 @@ public:
     // (built into Core via the studio source tree) so we can pull its title /
     // hash / built-at out of the manifest.  Returns the resulting record.
     bool publish(const QByteArray &bytes,
-                 RegistryRecord &outRecord,
+                 const QString   &actor,
+                 RegistryRecord  &outRecord,
                  QString *error = nullptr);
 
     // Admin operations — flip a row's status.  Returns false if the row
-    // doesn't exist or the requested transition is meaningless.
-    bool deploy  (const QString &id, const QString &version, QString *error = nullptr);
-    bool rollback(const QString &id, const QString &version, QString *error = nullptr);
+    // doesn't exist or the requested transition is meaningless.  `actor`
+    // is recorded in the audit trail.
+    bool deploy        (const QString &id, const QString &version,
+                        const QString &actor, QString *error = nullptr);
+    bool rollback      (const QString &id, const QString &version,
+                        const QString &actor, QString *error = nullptr);
+    bool deletePending (const QString &id, const QString &version,
+                        const QString &actor, QString *error = nullptr);
 
     QVector<RegistryRecord> list() const;
     QVector<RegistryRecord> list(const QString &statusFilter) const;
+    QVector<RegistryRecord> listByPackage(const QString &id) const;
     bool                    find(const QString &id, const QString &version,
                                  RegistryRecord &out) const;
     QByteArray              read(const QString &id, const QString &version) const;
+
+    // Audit log
+    QVector<AuditEvent> audit(const QString &packageId = QString(),
+                              int limit = 500) const;
 
     QString rootDir() const { return m_root; }
 
 private:
     bool ensureSchema(QString *error);
+    void recordAudit(const QString &eventType,
+                     const QString &id, const QString &version,
+                     const QString &actor, const QString &detail);
 
     QString       m_root;
     QSqlDatabase  m_db;

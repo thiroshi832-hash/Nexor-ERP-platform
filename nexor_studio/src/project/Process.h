@@ -24,6 +24,8 @@
 #include <QStringList>
 #include <QDateTime>
 #include <QVector>
+#include <QPointF>
+#include <QSizeF>
 
 struct ProcessMeta {
     QString   title;
@@ -51,6 +53,20 @@ struct StepSpec {
     QString nextId;
     QString formId;                            // HumanTask only
     QString code;                              // Nexor source executed for the step
+    QString name;                              // human-readable label (BPMN @name)
+    QPointF pos;                               // diagram position (BPMN DI)
+    QSizeF  size;                              // diagram size     (BPMN DI)
+
+    // For Choice (exclusiveGateway) steps: outgoing branches.  Each branch
+    // is the value the body Returns paired with the target step id.  If the
+    // body's return doesn't match any branch the engine falls back to the
+    // step's `nextId`.
+    struct Branch {
+        QString returnValue;       // matches Function's Return
+        QString targetId;          // step id to jump to
+        QString label;             // arrow label in the diagram
+    };
+    QVector<Branch> branches;
 };
 
 class Process {
@@ -72,9 +88,17 @@ public:
     int startIndex() const;
     int indexOfStep(const QString &id) const;
 
-    // XML I/O — serialises {meta, steps} into a .prc file.
+    // I/O — BPMN 2.0 XML is the canonical format (see project/BpmnIo.h).
+    // load()/save() detect the file format from the root element:
+    //   <NexorPackage>        legacy .prc — auto-converted on load
+    //   <bpmn:definitions>    BPMN 2.0
     bool save() const;
     bool load();
+
+    // Returns true if this process is held in a .bpmn file (or about to be —
+    // i.e., the path ends in .bpmn).  Used by Studio when picking the
+    // designer to open.
+    bool isBpmn() const;
 
 private:
     ProcessMeta         m_meta;
