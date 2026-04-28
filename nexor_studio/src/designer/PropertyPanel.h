@@ -1,22 +1,21 @@
 // =============================================================================
-// PropertyPanel — right-side panel in Design mode.
+// PropertyPanel — VB6-style properties window built on a QTableWidget.
 //
-//   Properties (always shown when something is selected):
-//     Type (read-only)
-//     Name
-//     X, Y, W, H              (W/H only — for the form, sets size)
-//     Text                    (widgets with a text property; "Title" for form)
-//     Foreground colour       (color picker)
-//     Background colour       (color picker)
-//     Visible                 (widgets only — hidden for the form)
-//     Anchor                  (widgets only — Top / Left / Right / Bottom)
-//
-//   Events:
-//     widgets : Click, DoubleClick, RightClick
-//     form    : Load, Unload
-//
-//   Each event row has a "+ <handler-name>" button that asks MainWindow to
-//   create the stub in the form's code and switch to Edit mode.
+//   ┌────────────────────────────────┐
+//   │ PROPERTIES                     │  ← header
+//   ├────────────────────────────────┤
+//   │ [Categorized] [Alphabetical]   │  ← view tabs
+//   ├────────────────────────────────┤
+//   │ ▾ btn1  Button                 │  ← object combo
+//   ├──────────────┬─────────────────┤
+//   │ Name         │ btn1            │
+//   │ ─── Layout ─────────────────── │
+//   │ X            │ 24              │
+//   │ ...          │ ...             │
+//   ├──────────────┴─────────────────┤
+//   │ Width                          │  ← description (selected row)
+//   │ Returns/sets the width of...   │
+//   └────────────────────────────────┘
 // =============================================================================
 #ifndef NEXOR_STUDIO_PROPERTYPANEL_H
 #define NEXOR_STUDIO_PROPERTYPANEL_H
@@ -33,7 +32,9 @@ class QSpinBox;
 class QCheckBox;
 class QPushButton;
 class QToolButton;
-class QFormLayout;
+class QTableWidget;
+class QTableWidgetItem;
+class QComboBox;
 class QVBoxLayout;
 
 class PropertyPanel : public QWidget {
@@ -44,10 +45,8 @@ public:
     void setCanvas(FormCanvas *canvas);
 
 signals:
-    // Emitted when the user clicks "+ <handler>" in the Events section.
-    //   targetName : widget name OR form id
-    //   eventName  : "Click", "Load", ...
-    void eventHandlerRequested(const QString &targetName, const QString &eventName);
+    void eventHandlerRequested(const QString &targetName,
+                               const QString &eventName);
 
 public slots:
     void onSelectionChanged(QWidget *w);
@@ -70,43 +69,39 @@ private:
 
     QPushButton *makeColorBtn();
     QToolButton *makeAnchorBtn(const QString &letter);
-    QWidget     *makeEventRow(const QString &eventName);
     void         updateColorBtn(QPushButton *btn, const QColor &c);
-    void         setMode(Mode m);
-    void         setView(View v);
-    void         rebuildFormLayout();
-    void         rebuildEventsSection();
-    QString      anchorString() const;
-    void         applyAnchorString(const QString &s);
 
-    // Cached label lookups — guarantees one QLabel widget per text,
-    // so switching the categorized/alphabetical view doesn't pile up
-    // orphaned QLabels on the panel.
-    class QLabel *labelFor(const QString &text);
-    class QLabel *headerFor(const QString &text);
+    void setMode(Mode m);
+    void setView(View v);
+    void rebuildLayout();
+    QString anchorString() const;
+    void applyAnchorString(const QString &s);
 
-    FormCanvas *m_canvas { nullptr };
-    bool        m_updating { false };
-    Mode        m_mode     { ModeEmpty };
-    View        m_view     { ViewCategorized };
-    QToolButton *m_btnCategorized;
-    QToolButton *m_btnAlphabetical;
-    class QComboBox  *m_objectCombo  { nullptr };
-    class QLabel     *m_descLabel    { nullptr };
-    class QLabel     *m_descBody     { nullptr };
-    class QFormLayout *m_form { nullptr };
-    QHash<QString, class QLabel*> m_cachedLabels;
-    QHash<QString, class QLabel*> m_cachedHeaders;
-    QHash<QString, QString>       m_descriptions;   // field name → help text
+    // QTableWidget helpers
+    int  addPropertyRow(const QString &name, QWidget *editor);
+    int  addSectionHeader(const QString &text);
+    void detachAllEditorsFromTable();
+    void rebuildEventsInTable();
 
     void populateObjectCombo();
     QString descriptionFor(const QString &fieldName) const;
     void    setDescription(const QString &fieldName);
 
-    // Property fields
-    QLabel     *m_typeLabel;
+    FormCanvas *m_canvas { nullptr };
+    bool        m_updating { false };
+    Mode        m_mode     { ModeEmpty };
+    View        m_view     { ViewCategorized };
+
+    QToolButton  *m_btnCategorized;
+    QToolButton  *m_btnAlphabetical;
+    QComboBox    *m_objectCombo  { nullptr };
+    QTableWidget *m_table        { nullptr };
+    QLabel       *m_descLabel    { nullptr };
+    QLabel       *m_descBody     { nullptr };
+
+    // Editor widgets (persist across rebuilds; reparented in/out of table)
     QLineEdit  *m_nameEdit;
-    QLabel     *m_textLabel;       // label text changes between "Text" / "Title"
+    QLabel     *m_textLabel;        // unused now (label comes from item)
     QLineEdit  *m_textEdit;
     QSpinBox   *m_xSpin;
     QSpinBox   *m_ySpin;
@@ -121,15 +116,10 @@ private:
     QToolButton *m_anchorL;
     QToolButton *m_anchorR;
     QToolButton *m_anchorB;
+    QWidget     *m_visibleRow;       // wrapper around m_visibleCheck
+    QWidget     *m_anchorRow;        // wrapper around the 4 anchor buttons
 
-    QWidget     *m_visibleRow;     // hide for form mode
-    QWidget     *m_anchorRow;      // hide for form mode
-
-    // Events section
-    QWidget     *m_eventsBox;
-    QVBoxLayout *m_eventsLayout;
-
-    QLabel      *m_emptyLabel;
+    QHash<QString, QString> m_descriptions;
 };
 
 #endif // NEXOR_STUDIO_PROPERTYPANEL_H
