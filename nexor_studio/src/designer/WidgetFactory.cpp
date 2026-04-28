@@ -16,6 +16,20 @@
 #include <QDateTimeEdit>
 #include <QSpinBox>
 #include <QDateTime>
+#include <QColor>
+
+// Helper: re-apply combined fg/bg stylesheet from the stored dynamic
+// properties.  Called after either colour changes.
+namespace {
+void applyColors(QWidget *w) {
+    QColor fg = w->property("nexorFg").value<QColor>();
+    QColor bg = w->property("nexorBg").value<QColor>();
+    QString css;
+    if (fg.isValid()) css += QString("color:%1;").arg(fg.name());
+    if (bg.isValid()) css += QString("background-color:%1;").arg(bg.name());
+    w->setStyleSheet(css);
+}
+} // namespace
 
 QWidget *WidgetFactory::create(const QString &type, QWidget *parent) {
     if (type == "Button")          return new QPushButton(QStringLiteral("Button"), parent);
@@ -75,6 +89,22 @@ void WidgetFactory::applyProperty(QWidget *w, const QString &key, const QVariant
         if (auto *e = qobject_cast<QLineEdit*>(w))            { e->setText(v.toString());     return; }
         if (auto *pe = qobject_cast<QPlainTextEdit*>(w))      { pe->setPlainText(v.toString()); return; }
         if (auto *gb = qobject_cast<QGroupBox*>(w))           { gb->setTitle(v.toString());   return; }
+        return;
+    }
+    if (key == "fgColor" || key == "bgColor") {
+        QColor c = v.canConvert<QColor>() ? v.value<QColor>() : QColor(v.toString());
+        w->setProperty(key == "fgColor" ? "nexorFg" : "nexorBg", c);
+        applyColors(w);
+        return;
+    }
+    if (key == "visible") {
+        // Stored only — at design-time we always show.  Runtime applies it.
+        w->setProperty("nexorVisible", v.toBool());
+        return;
+    }
+    if (key == "anchor") {
+        w->setProperty("nexorAnchor", v.toString());
+        return;
     }
 }
 
@@ -87,6 +117,10 @@ QVariant WidgetFactory::readProperty(const QWidget *w, const QString &key) {
         if (auto *pe = qobject_cast<const QPlainTextEdit*>(w))   return pe->toPlainText();
         if (auto *gb = qobject_cast<const QGroupBox*>(w))        return gb->title();
     }
+    if (key == "fgColor")  return w->property("nexorFg");
+    if (key == "bgColor")  return w->property("nexorBg");
+    if (key == "visible")  return w->property("nexorVisible");
+    if (key == "anchor")   return w->property("nexorAnchor");
     return {};
 }
 

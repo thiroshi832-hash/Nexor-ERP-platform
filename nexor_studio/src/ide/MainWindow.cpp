@@ -6,8 +6,13 @@
 #include "welcome/WelcomePage.h"
 #include "editor/CodeEditor.h"
 #include "designer/FormCanvas.h"
+#include "designer/DesignerView.h"
+#include "designer/PropertyPanel.h"
 #include "runtime/FormRunner.h"
 #include "project/Project.h"
+
+#include <QRegularExpression>
+#include <QTextCursor>
 #include "project/Activity.h"
 #include "project/ProjectTree.h"
 #include "dialogs/NewProjectDialog.h"
@@ -157,6 +162,58 @@ void MainWindow::setupUi() {
             this, &MainWindow::onFormActivated);
     connect(m_projectTree, &ProjectTree::activityActivated,
             this, &MainWindow::onActivityActivated);
+
+    // PropertyPanel "+ generate handler" button → insert stub into the form
+    // code (in the editor if it's already showing this form's code; in the
+    // canvas otherwise) and switch to Edit mode focused on the new sub.
+    connect(m_central->designerView()->propertyPanel(),
+            &PropertyPanel::eventHandlerRequested,
+            this, [this](const QString &target, const QString &event) {
+        QString subName = target + "_" + event;
+        auto *editor = m_central->codeEditor();
+        auto *canvas = m_central->formCanvas();
+        if (!canvas || canvas->currentFormPath().isEmpty()) return;
+
+        // Make sure the editor is showing this form's code.
+        if (editor->currentKind() != CodeEditor::KindForm
+         || editor->currentFilePath() != canvas->currentFormPath()) {
+            editor->loadForm(canvas->currentFormPath());
+        }
+
+        // Find an existing handler with that name.
+        QRegularExpression re(
+            QString(R"(\bSub\s+%1\s*\()").arg(QRegularExpression::escape(subName)),
+            QRegularExpression::CaseInsensitiveOption);
+        auto match = re.match(editor->toPlainText());
+
+        if (match.hasMatch()) {
+            // Just navigate to it.
+            QTextCursor c(editor->document());
+            c.setPosition(match.capturedStart());
+            editor->setTextCursor(c);
+        } else {
+            // Append a stub.
+            QString stub = QString(
+                "\nSub %1()\n"
+                "    ' TODO: handle %2\n"
+                "End Sub\n"
+            ).arg(subName, event);
+            QTextCursor c = editor->textCursor();
+            c.movePosition(QTextCursor::End);
+            c.insertText(stub);
+            // Move cursor inside the new sub body.
+            c.movePosition(QTextCursor::Up,   QTextCursor::MoveAnchor, 2);
+            c.movePosition(QTextCursor::EndOfLine);
+            editor->setTextCursor(c);
+            appendOutput("Inserted handler: " + subName, "#a3e635");
+        }
+        editor->ensureCursorVisible();
+        editor->setFocus();
+
+        // Switch to Edit mode.
+        m_tabBar->setCurrentMode(FancyTabBar::ModeEdit);
+        m_central->showPage(CentralStack::PageEditor);
+    });
 }
 
 void MainWindow::buildMenus() {

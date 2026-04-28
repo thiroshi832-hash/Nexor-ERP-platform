@@ -45,13 +45,26 @@ public:
     void    setFormSize(const QSize &s);
 
     QWidget* selectedWidget() const { return m_selected; }
+    bool     isFormSelected() const { return m_formSelected; }
     QString  selectedName()   const;
     QString  selectedType()   const;
+    void     selectForm();         // selects the form itself (for property panel)
 
-    // Mutators called by the PropertyPanel.
+    // Per-widget mutators called by the PropertyPanel.
     void setNameForSelected(const QString &n);
     void setTextForSelected(const QString &t);
     void setGeometryForSelected(const QRect &g);
+    void setForegroundForSelected(const QColor &c);
+    void setBackgroundForSelected(const QColor &c);
+    void setVisibleForSelected(bool visible);
+    void setAnchorForSelected(const QString &anchor);
+
+    // Form-as-target mutators.
+    QColor formForeground() const { return m_formFg; }
+    QColor formBackground() const { return m_formBg; }
+    void   setFormForeground(const QColor &c);
+    void   setFormBackground(const QColor &c);
+    void   setFormGeometryFromPanel(const QRect &g);   // for X/Y/W/H of form
 
     // Public to allow the FormRunner to walk the design.
     struct Item { QString type; QString name; QWidget *widget; };
@@ -66,7 +79,8 @@ public:
     void    setCode(const QString &c) { m_code = c; emit modified(); }
 
 signals:
-    void selectionChanged(QWidget *w);
+    void selectionChanged(QWidget *w);   // null when nothing OR form selected
+    void formSelected();                  // emitted when the form is picked
     void modified();
 
 protected:
@@ -100,8 +114,11 @@ private:
     QString m_id;
     QString m_title;
     QString m_code;
+    QColor  m_formFg;
+    QColor  m_formBg;
     int     m_formW { 640 };
     int     m_formH { 480 };
+    bool    m_formSelected { false };
 
     // ── Visual chrome constants ──────────────────────────────────────────
     static constexpr int kTitleBarH = 28;

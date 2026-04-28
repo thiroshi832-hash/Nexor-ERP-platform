@@ -12,6 +12,8 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QSet>
+#include <QColor>
+#include <QHash>
 
 // =============================================================================
 // FormCanvas::SelHandle — small overlay widget at one of 8 positions around
@@ -226,14 +228,24 @@ QString FormCanvas::uniqueName(const QString &prefix) {
 }
 
 void FormCanvas::selectWidget(QWidget *w) {
-    if (m_selected == w) {
+    if (m_selected == w && !m_formSelected) {
         layoutHandles();
         return;
     }
     m_selected = w;
+    m_formSelected = false;
     layoutHandles();
     update();
     emit selectionChanged(w);
+}
+
+void FormCanvas::selectForm() {
+    m_selected = nullptr;
+    m_formSelected = true;
+    layoutHandles();
+    update();
+    emit selectionChanged(nullptr);
+    emit formSelected();
 }
 
 void FormCanvas::deleteSelected() {
@@ -313,10 +325,60 @@ void FormCanvas::setFormSize(const QSize &s) {
     emit modified();
 }
 
+void FormCanvas::setFormGeometryFromPanel(const QRect &g) {
+    setFormSize(g.size());
+}
+
+void FormCanvas::setFormForeground(const QColor &c) {
+    m_formFg = c;
+    // Apply to body for visual preview (foreground is used by labels etc).
+    QString css;
+    if (m_formBg.isValid())
+        css += QString("background:%1;").arg(m_formBg.name());
+    else
+        css += "background:#f5f5f5;";
+    css += " border:1px solid #1e2030;";
+    if (m_formFg.isValid()) css += QString("color:%1;").arg(m_formFg.name());
+    m_body->setStyleSheet(QString("QWidget#formBody {%1}").arg(css));
+    update();
+    emit modified();
+}
+
+void FormCanvas::setFormBackground(const QColor &c) {
+    m_formBg = c;
+    setFormForeground(m_formFg);   // re-apply combined stylesheet
+}
+
+void FormCanvas::setForegroundForSelected(const QColor &c) {
+    if (!m_selected) return;
+    WidgetFactory::applyProperty(m_selected, "fgColor", c);
+    emit modified();
+}
+
+void FormCanvas::setBackgroundForSelected(const QColor &c) {
+    if (!m_selected) return;
+    WidgetFactory::applyProperty(m_selected, "bgColor", c);
+    emit modified();
+}
+
+void FormCanvas::setVisibleForSelected(bool visible) {
+    if (!m_selected) return;
+    WidgetFactory::applyProperty(m_selected, "visible", visible);
+    // Reflect at design-time as a faint dashed outline if hidden.
+    m_selected->setWindowOpacity(visible ? 1.0 : 0.5);
+    emit modified();
+}
+
+void FormCanvas::setAnchorForSelected(const QString &anchor) {
+    if (!m_selected) return;
+    WidgetFactory::applyProperty(m_selected, "anchor", anchor);
+    emit modified();
+}
+
 // ─── Mouse handling ────────────────────────────────────────────────────
 void FormCanvas::mousePressEvent(QMouseEvent *e) {
-    // Click on canvas (outside body) deselects
-    selectWidget(nullptr);
+    // Click on canvas outside the body — leave form selected.
+    selectForm();
     setFocus(Qt::MouseFocusReason);
     QWidget::mousePressEvent(e);
 }
@@ -347,7 +409,7 @@ bool FormCanvas::eventFilter(QObject *obj, QEvent *event) {
             return true;
         }
         case QEvent::MouseButtonPress:
-            selectWidget(nullptr);
+            selectForm();                      // body click selects the form
             setFocus(Qt::MouseFocusReason);
             return false;
         default:
@@ -479,6 +541,10 @@ void FormCanvas::clearForm() {
     cleanupAllWidgets();
     m_path.clear(); m_id.clear(); m_title.clear(); m_code.clear();
     m_formW = 640; m_formH = 480;
+    m_formFg = QColor(); m_formBg = QColor();
+    m_body->setStyleSheet(
+        "QWidget#formBody { background:#f5f5f5; border:1px solid #1e2030; }");
+    m_formSelected = false;
     layoutBody();
     update();
 }
@@ -496,10 +562,13 @@ bool FormCanvas::loadForm(const QString &filePath) {
 
     QXmlStreamReader r(&f);
 
-    // Per-Widget scratch
+    // Per-Widget scratch + properties accumulator.
     bool inWidget = false;
-    QString cType, cName, cText;
+    bool inFormProps = false;     // <Property> directly under <Form>
+    QString cType, cName;
     int cx = 0, cy = 0, cw = 0, ch = 0;
+    QHash<QString, QString> cProps;     // widget properties
+    QHash<QString, QString> formProps;  // form-level properties
 
     while (!r.atEnd()) {
         r.readNext();
@@ -507,6 +576,7 @@ bool FormCanvas::loadForm(const QString &filePath) {
             const QStringRef n = r.name();
             if (n == "Form") {
                 m_id = r.attributes().value("id").toString();
+                inFormProps = true;
             } else if (n == "Geometry") {
                 const auto a = r.attributes();
                 if (a.hasAttribute("width"))  m_formW = a.value("width").toInt();
@@ -516,7 +586,9 @@ bool FormCanvas::loadForm(const QString &filePath) {
             } else if (n == "Code") {
                 m_code = r.readElementText();
             } else if (n == "Widget") {
-                inWidget = true; cText.clear();
+                inWidget = true;
+                inFormProps = false;
+                cProps.clear();
                 const auto a = r.attributes();
                 cType = a.value("type").toString();
                 cName = a.value("name").toString();
@@ -524,10 +596,11 @@ bool FormCanvas::loadForm(const QString &filePath) {
                 cy = a.value("y").toInt();
                 cw = a.value("width").toInt();
                 ch = a.value("height").toInt();
-            } else if (n == "Property" && inWidget) {
+            } else if (n == "Property") {
                 QString pn = r.attributes().value("name").toString();
                 QString pv = r.readElementText();
-                if (pn == "text") cText = pv;
+                if (inWidget)         cProps[pn] = pv;
+                else if (inFormProps) formProps[pn] = pv;
             }
         } else if (r.isEndElement()) {
             if (r.name() == "Widget" && inWidget) {
@@ -535,8 +608,16 @@ bool FormCanvas::loadForm(const QString &filePath) {
                     if (cw < 4) cw = WidgetFactory::defaultSize(cType).width();
                     if (ch < 4) ch = WidgetFactory::defaultSize(cType).height();
                     w->setGeometry(cx, cy, cw, ch);
-                    if (!cText.isEmpty())
-                        WidgetFactory::applyProperty(w, "text", cText);
+                    // Apply every saved property through the factory.
+                    for (auto it = cProps.begin(); it != cProps.end(); ++it) {
+                        QString key = it.key(), val = it.value();
+                        if (key == "fgColor" || key == "bgColor")
+                            WidgetFactory::applyProperty(w, key, QColor(val));
+                        else if (key == "visible")
+                            WidgetFactory::applyProperty(w, key, val == "true");
+                        else
+                            WidgetFactory::applyProperty(w, key, val);
+                    }
                     w->show();
                     w->installEventFilter(this);
                     Item it { cType,
@@ -551,9 +632,16 @@ bool FormCanvas::loadForm(const QString &filePath) {
         }
     }
 
+    // Apply form-level properties.
+    if (formProps.contains("fgColor")) m_formFg = QColor(formProps["fgColor"]);
+    if (formProps.contains("bgColor")) m_formBg = QColor(formProps["bgColor"]);
+    if (m_formFg.isValid() || m_formBg.isValid())
+        setFormForeground(m_formFg);   // also re-applies bg
+
     if (m_title.isEmpty()) m_title = m_id;
     layoutBody();
     update();
+    selectForm();                       // start with form selected
     return !r.hasError();
 }
 
@@ -579,6 +667,17 @@ bool FormCanvas::saveForm() {
     w.writeCharacters(m_title);
     w.writeEndElement();
 
+    // Form-level properties (only fgColor/bgColor for now — geometry already
+    // lives in <Geometry>; visible/anchor don't apply to the form).
+    auto writeProp = [&](const QString &name, const QString &value) {
+        w.writeStartElement("Property");
+        w.writeAttribute("name", name);
+        w.writeCharacters(value);
+        w.writeEndElement();
+    };
+    if (m_formFg.isValid()) writeProp("fgColor", m_formFg.name());
+    if (m_formBg.isValid()) writeProp("bgColor", m_formBg.name());
+
     w.writeStartElement("Widgets");
     for (const Item &it : m_items) {
         w.writeStartElement("Widget");
@@ -588,13 +687,21 @@ bool FormCanvas::saveForm() {
         w.writeAttribute("y",      QString::number(it.widget->y()));
         w.writeAttribute("width",  QString::number(it.widget->width()));
         w.writeAttribute("height", QString::number(it.widget->height()));
-        if (WidgetFactory::hasTextProperty(it.type)) {
-            QString text = WidgetFactory::readProperty(it.widget, "text").toString();
-            w.writeStartElement("Property");
-            w.writeAttribute("name", "text");
-            w.writeCharacters(text);
-            w.writeEndElement();
-        }
+
+        if (WidgetFactory::hasTextProperty(it.type))
+            writeProp("text", WidgetFactory::readProperty(it.widget, "text").toString());
+
+        QColor fg = WidgetFactory::readProperty(it.widget, "fgColor").value<QColor>();
+        if (fg.isValid()) writeProp("fgColor", fg.name());
+        QColor bg = WidgetFactory::readProperty(it.widget, "bgColor").value<QColor>();
+        if (bg.isValid()) writeProp("bgColor", bg.name());
+
+        QVariant visV = WidgetFactory::readProperty(it.widget, "visible");
+        if (visV.isValid()) writeProp("visible", visV.toBool() ? "true" : "false");
+
+        QString anchor = WidgetFactory::readProperty(it.widget, "anchor").toString();
+        if (!anchor.isEmpty()) writeProp("anchor", anchor);
+
         w.writeEndElement();
     }
     w.writeEndElement();
