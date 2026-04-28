@@ -12,6 +12,7 @@
 #include "designer/WidgetFactory.h"
 #include "dialogs/TabOrderDialog.h"
 #include "runtime/FormRunner.h"
+#include "language/NexorRuntime.h"
 #include "project/Project.h"
 
 #include <QRegularExpression>
@@ -337,12 +338,50 @@ void MainWindow::buildMenus() {
                 "Open a form first (double-click a .frm in the project tree).");
             return;
         }
-        // Save first so the runner picks up the latest design
+        // Save first so the runner picks up the latest design + code
+        if (m_central->codeEditor()
+            && m_central->codeEditor()->currentKind() == CodeEditor::KindForm
+            && m_central->codeEditor()->currentFilePath() ==
+                                         m_central->formCanvas()->currentFormPath()) {
+            m_central->formCanvas()->setCode(m_central->codeEditor()->toPlainText());
+        }
         m_central->formCanvas()->saveForm();
         QString path = m_central->formCanvas()->currentFormPath();
         appendOutput("Run form: " + path, "#5b8cff");
-        FormRunner::runForm(path, this);
+        // Pipe Print + runtime errors back to the OUTPUT pane.
+        FormRunner::runForm(path, this,
+            [this](const QString &line) { appendOutput(line, "#dce1e7"); },
+            [this](const QString &err)  { appendOutput("ERROR: " + err, "#ef4444"); });
     }, QKeySequence(Qt::Key_F5));
+
+    runMenu->addAction("Run &Activity (Sub Main)", this, [this]{
+        // Runs the current activity's Sub Main from the editor's text.
+        if (!m_central->codeEditor()
+         || m_central->codeEditor()->currentKind() != CodeEditor::KindActivity) {
+            QMessageBox::information(this, "Run Activity",
+                "Open an activity (.aba) in the editor first.");
+            return;
+        }
+        // Persist what's in the editor before running.
+        m_central->codeEditor()->saveActivity();
+        QString unit = QFileInfo(m_central->codeEditor()->currentFilePath()).fileName();
+        QString src  = m_central->codeEditor()->toPlainText();
+        appendOutput("Run activity: " + unit, "#5b8cff");
+
+        nx::NexorRuntime rt;
+        rt.setOutput([this](const QString &line) { appendOutput(line, "#dce1e7"); });
+        rt.setError ([this](const QString &err)  { appendOutput("ERROR: " + err, "#ef4444"); });
+        if (!rt.compile(src, unit)) {
+            appendOutput("Compile error: " + rt.lastError(), "#ef4444");
+            return;
+        }
+        if (!rt.hasSub("Main")) {
+            appendOutput("No Sub Main() defined in this activity.", "#facc15");
+            return;
+        }
+        rt.call("Main");
+        appendOutput("Activity finished.", "#22c55e");
+    }, QKeySequence("Ctrl+F5"));
 
     auto *dbgMenu = menuBar()->addMenu("&Debug");
     dbgMenu->addAction("Start Debugging")->setEnabled(false);
