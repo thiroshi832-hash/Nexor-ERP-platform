@@ -73,6 +73,9 @@ HEADERS += \
     \
     ../nexor_studio/src/designer/WidgetFactory.h
 
+RC_FILE     = nexor_flux.rc
+RESOURCES  += nexor_flux.qrc
+
 DESTDIR     = $$PWD/../bin
 OBJECTS_DIR = $$PWD/build/obj
 MOC_DIR     = $$PWD/build/moc

@@ -1,0 +1,3 @@
+// Windows resource for NexorStudio.exe
+// IDI_ICON1 makes Windows pick this as the file-explorer / taskbar icon.
+IDI_ICON1   ICON   DISCARDABLE   "../icons/nexor_studio.ico"

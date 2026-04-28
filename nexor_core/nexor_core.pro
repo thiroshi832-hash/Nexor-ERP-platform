@@ -73,6 +73,9 @@ HEADERS += \
     ../nexor_studio/src/project/BpmnIo.h \
     ../nexor_studio/src/project/Project.h
 
+RC_FILE     = nexor_core.rc
+RESOURCES  += nexor_core.qrc
+
 DESTDIR     = $$PWD/../bin
 OBJECTS_DIR = $$PWD/build/obj
 MOC_DIR     = $$PWD/build/moc
