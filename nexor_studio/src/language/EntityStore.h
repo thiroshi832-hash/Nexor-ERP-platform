@@ -1,32 +1,39 @@
 // =============================================================================
-// EntityStore — in-memory runtime entity storage.
+// EntityStore — SQLite-backed runtime entity storage.
 //
-//   • SheetSchema mirrors a project Sheet's field list at runtime.
-//   • Entity is a row: a hash of field name → Value.  Has an Id (auto-incremented
-//     by its store).
-//   • EntityTable holds all rows for one sheet, indexed by Id.
-//   • EntityStore owns one EntityTable per registered sheet.
-//   • SheetRef is a runtime handle to a sheet (returned when user code says
-//     `Customer`); it carries pointers back into the store so that .New / .Find
-//     / .All / .Save calls find their data.
+// Every project keeps a single SQLite file (project.ndb in the project root).
+// One SQL table per registered sheet, columns mirror the FieldSpec list.
+// All entity operations (.New, .Find, .All, .Count, .Save, .Delete) are
+// translated to prepared SQL statements with bound parameters.
 //
-// This is in-memory only — Phase 4 will wire it to SQLite, Phase 6 to Postgres
-// on Nexor Core.
+// Ownership model:
+//   • EntityStore owns the QSqlDatabase connection (named per project).
+//   • EntityTable holds a copy of the schema + a pointer to the connection.
+//   • Entity is a transient row object (hash of field name → Value) that
+//     either represents an unsaved row (id == 0) or a persisted one.
+//
+// Schema migration is conservative: we CREATE TABLE IF NOT EXISTS on register,
+// and ALTER TABLE ADD COLUMN for any new field that isn't already present.
+// We never DROP a column (SQLite < 3.35 can't anyway) or change its type —
+// such changes need an explicit migration story we'll add in a later phase.
 // =============================================================================
 #ifndef NEXOR_STUDIO_LANG_ENTITYSTORE_H
 #define NEXOR_STUDIO_LANG_ENTITYSTORE_H
 
 #include "Value.h"
 #include <QString>
+#include <QStringList>
 #include <QVector>
 #include <QHash>
+#include <QSqlDatabase>
 #include <memory>
 
 namespace nx {
 
 struct SheetSchemaField {
     QString name;
-    QString type;        // "String", "Long", "Double", "Decimal", "Boolean", "Date"
+    QString type;        // "String", "Long", "Integer", "Double", "Decimal",
+                         // "Boolean", "Date", "Variant"
     bool    isKey       { false };
     bool    required    { false };
     QString defaultText;
@@ -35,7 +42,7 @@ struct SheetSchemaField {
 struct SheetSchema {
     QString                    sheetId;
     QVector<SheetSchemaField>  fields;
-    bool hasField(const QString &name) const;
+    bool    hasField(const QString &name) const;
     QString keyField() const;            // first key field, or "Id" by default
 };
 
@@ -63,39 +70,64 @@ private:
 class EntityTable {
 public:
     EntityTable() = default;
-    explicit EntityTable(SheetSchema schema);
+    EntityTable(QSqlDatabase db, SheetSchema schema);
 
     const SheetSchema& schema() const { return m_schema; }
 
+    // Brings the SQL table in line with the schema.  Idempotent.
+    bool ensureSchema();
+
+    // CRUD
     std::shared_ptr<Entity> create();                   // unsaved, no id
-    bool   save(std::shared_ptr<Entity> e);             // assigns id if new
+    bool   save(std::shared_ptr<Entity> e);             // INSERT or UPDATE
     std::shared_ptr<Entity> find(qint64 id) const;
     bool   remove(qint64 id);
     QVector<std::shared_ptr<Entity>> all() const;
+    qint64 count() const;
 
 private:
-    SheetSchema                                  m_schema;
-    qint64                                       m_nextId { 1 };
-    QHash<qint64, std::shared_ptr<Entity>>       m_rows;
+    static QString sqlType(const QString &nexorType);
+    QString tableName() const;
+    QStringList columnsInDb() const;
+    std::shared_ptr<Entity> rowToEntity(const class QSqlQuery &q) const;
+    void    bindFromEntity(class QSqlQuery &q, const std::shared_ptr<Entity> &e) const;
+
+    QSqlDatabase   m_db;
+    SheetSchema    m_schema;
 };
 
 class EntityStore {
 public:
+    EntityStore();
+    ~EntityStore();
+
+    // Connects (or creates) the SQLite file at filePath.  Subsequent
+    // registerSheet calls run schema migrations against this database.
+    bool open(const QString &filePath);
+    bool isOpen() const;
+    void close();
+
+    // Register / unregister the runtime view of a sheet.  Adding a sheet
+    // that already exists in the DB is a no-op; adding new fields runs
+    // ALTER TABLE ADD COLUMN.
     void registerSheet(const SheetSchema &s);
     void unregisterSheet(const QString &sheetId);
     bool hasSheet(const QString &sheetId) const;
 
-    EntityTable* table(const QString &sheetId);              // null if unknown
+    EntityTable*       table(const QString &sheetId);
     const SheetSchema* schema(const QString &sheetId) const;
 
     QStringList sheetIds() const { return m_tables.keys(); }
 
 private:
-    QHash<QString, std::shared_ptr<EntityTable>> m_tables;   // keys lowercased
     static QString norm(const QString &s) { return s.toLower(); }
+
+    QString                                      m_connectionName;
+    QSqlDatabase                                 m_db;
+    QHash<QString, std::shared_ptr<EntityTable>> m_tables;   // keys lowercased
 };
 
-// SheetRef — runtime handle that the interpreter exposes via the sheet name.
+// SheetRef — runtime handle the interpreter exposes via the sheet name.
 struct SheetRef {
     QString      sheetId;     // canonical (case-preserved) name
     EntityStore *store;       // weak pointer; lifetime owned by Interpreter

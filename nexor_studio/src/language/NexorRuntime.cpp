@@ -38,6 +38,13 @@ bool NexorRuntime::hasSub(const QString &name) const {
 
 void NexorRuntime::registerProjectSheets(const Project *project) {
     if (!project) return;
+    // Open the project's persistent store at <project_root>/project.ndb
+    QString root = project->rootDir();
+    if (!root.isEmpty()) {
+        QString dbPath = root + "/project.ndb";
+        if (!m_interp->entityStore()->isOpen())
+            m_interp->entityStore()->open(dbPath);
+    }
     for (const auto &sht : project->sheets()) {
         nx::SheetSchema s;
         s.sheetId = sht->meta().id;
