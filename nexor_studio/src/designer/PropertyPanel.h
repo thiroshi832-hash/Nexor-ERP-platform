@@ -23,6 +23,8 @@
 
 #include <QWidget>
 #include <QColor>
+#include <QHash>
+#include <QString>
 
 class FormCanvas;
 class QLabel;
@@ -77,6 +79,12 @@ private:
     QString      anchorString() const;
     void         applyAnchorString(const QString &s);
 
+    // Cached label lookups — guarantees one QLabel widget per text,
+    // so switching the categorized/alphabetical view doesn't pile up
+    // orphaned QLabels on the panel.
+    class QLabel *labelFor(const QString &text);
+    class QLabel *headerFor(const QString &text);
+
     FormCanvas *m_canvas { nullptr };
     bool        m_updating { false };
     Mode        m_mode     { ModeEmpty };
@@ -84,6 +92,8 @@ private:
     QToolButton *m_btnCategorized;
     QToolButton *m_btnAlphabetical;
     class QFormLayout *m_form { nullptr };
+    QHash<QString, class QLabel*> m_cachedLabels;
+    QHash<QString, class QLabel*> m_cachedHeaders;
 
     // Property fields
     QLabel     *m_typeLabel;

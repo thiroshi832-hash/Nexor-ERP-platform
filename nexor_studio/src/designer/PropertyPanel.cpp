@@ -281,27 +281,63 @@ void PropertyPanel::setView(View v) {
     rebuildFormLayout();
 }
 
+QLabel *PropertyPanel::labelFor(const QString &text) {
+    QLabel *l = m_cachedLabels.value(text, nullptr);
+    if (!l) {
+        l = new QLabel(text, this);
+        l->setObjectName("fieldLabel");
+        l->hide();
+        m_cachedLabels.insert(text, l);
+    }
+    return l;
+}
+
+QLabel *PropertyPanel::headerFor(const QString &text) {
+    QLabel *l = m_cachedHeaders.value(text, nullptr);
+    if (!l) {
+        l = new QLabel(text, this);
+        l->setObjectName("sectionHdr");
+        l->hide();
+        m_cachedHeaders.insert(text, l);
+    }
+    return l;
+}
+
 void PropertyPanel::rebuildFormLayout() {
     if (!m_form) return;
-    // Detach all rows without deleting their widgets.
+
+    // 1. Hide every persistent widget that *might* have been laid out.
+    //    Anything we add() below will be re-shown explicitly.  This is the
+    //    crucial step — takeRow() doesn't delete widgets, so without
+    //    hiding first, old labels would paint over the new layout.
+    for (QLabel *l : m_cachedLabels)  if (l) l->hide();
+    for (QLabel *l : m_cachedHeaders) if (l) l->hide();
+    QList<QWidget*> editors {
+        m_nameEdit, m_textEdit, m_xSpin, m_ySpin, m_wSpin, m_hSpin,
+        m_fgBtn, m_bgBtn, m_visibleRow, m_anchorRow
+    };
+    for (QWidget *w : editors) if (w) w->setVisible(false);
+
+    // 2. Detach all rows.  Only delete the QLayoutItem wrappers — the
+    //    underlying widgets are persistent (cached labels + member editors).
     while (m_form->rowCount() > 0) {
         QFormLayout::TakeRowResult r = m_form->takeRow(0);
-        if (r.labelItem)  delete r.labelItem;
-        if (r.fieldItem)  delete r.fieldItem;
+        delete r.labelItem;
+        delete r.fieldItem;
     }
     if (m_mode == ModeEmpty) return;
 
     auto add = [&](const QString &lbl, QWidget *editor) {
-        auto *l = new QLabel(lbl);
-        l->setObjectName("fieldLabel");
+        QLabel *l = labelFor(lbl);
         m_form->addRow(l, editor);
+        l->setVisible(true);
         editor->setVisible(true);
     };
     auto addHeader = [&](const QString &text) {
         if (m_view != ViewCategorized) return;
-        auto *h = new QLabel(text);
-        h->setObjectName("sectionHdr");
+        QLabel *h = headerFor(text);
         m_form->addRow(h);
+        h->setVisible(true);
     };
 
     if (m_view == ViewCategorized) {
