@@ -26,6 +26,7 @@ SOURCES += \
     src/runtime/ProcessEngine.cpp \
     src/build/PackageBuilder.cpp \
     src/build/PackageReader.cpp \
+    src/build/PackageDiff.cpp \
     src/language/Lexer.cpp \
     src/language/Parser.cpp \
     src/language/Value.cpp \
@@ -66,6 +67,7 @@ HEADERS += \
     src/build/Package.h \
     src/build/PackageBuilder.h \
     src/build/PackageReader.h \
+    src/build/PackageDiff.h \
     src/language/Token.h \
     src/language/Lexer.h \
     src/language/Ast.h \
