@@ -16,6 +16,7 @@
 #include "Http.h"
 #include "PackageRegistry.h"
 #include "PackageApi.h"
+#include "RpcApi.h"
 
 int main(int argc, char *argv[]) {
     QCoreApplication app(argc, argv);
@@ -65,6 +66,10 @@ int main(int argc, char *argv[]) {
     api.setAdminToken(adminToken);
     api.registerRoutes();
 
+    nx::RpcApi rpc(&router, &registry);
+    rpc.setAdminToken(adminToken);
+    rpc.registerRoutes();
+
     nx::HttpServer server(&router);
     if (!server.start(port)) {
         qCritical().noquote() << "NexorCore: cannot bind port" << port;
@@ -79,6 +84,7 @@ int main(int argc, char *argv[]) {
     qInfo().noquote() << "  GET  /api/v1/admin/packages[?status=…]";
     qInfo().noquote() << "  POST /api/v1/admin/packages/:id/:version/deploy";
     qInfo().noquote() << "  POST /api/v1/admin/packages/:id/:version/rollback";
+    qInfo().noquote() << "  POST /api/v1/rpc/:package/:sub                      (ServerOnly subs)";
     qInfo().noquote() << QString("  signing-key : %1").arg(
         signingKey.isEmpty() ? "<permissive>" : "<set>");
     qInfo().noquote() << QString("  admin-token : %1").arg(

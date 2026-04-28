@@ -57,6 +57,10 @@ public:
     Value   get(const QString &name) const;
     void    set(const QString &name, const Value &v);
 
+    // Field names actually present on this entity (lowercase).  Used by
+    // the JSON serialisation layer when packaging an Entity for RPC.
+    QStringList fieldNames() const;
+
     bool    isPersisted() const       { return m_persisted; }
     void    setPersisted(bool b)      { m_persisted = b; }
 

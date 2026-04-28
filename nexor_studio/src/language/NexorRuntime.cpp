@@ -4,7 +4,9 @@
 #include "project/Project.h"
 #include "project/Sheet.h"
 #include "project/Process.h"
-#include "runtime/ProcessEngine.h"
+#if defined(NEXOR_HAS_PROCESS_ENGINE)
+#  include "runtime/ProcessEngine.h"
+#endif
 
 namespace nx {
 
@@ -69,6 +71,7 @@ void NexorRuntime::registerProjectSheets(const Project *project) {
         // Capture by value so the runner remains valid for the lifetime
         // of this NexorRuntime even if the Project is mutated.
         const Project *pj = project;
+#if defined(NEXOR_HAS_PROCESS_ENGINE)
         interp->registerProcess(prc->meta().id,
             [interp, prcPath, pj](const QVector<Value> &) -> Value {
                 // Pipe step Print + errors back through this interpreter's
@@ -79,6 +82,9 @@ void NexorRuntime::registerProjectSheets(const Project *project) {
                     pj);
                 return Value();
             });
+#else
+        Q_UNUSED(prcPath); Q_UNUSED(pj); Q_UNUSED(interp);
+#endif
     }
 }
 

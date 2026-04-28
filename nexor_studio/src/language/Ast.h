@@ -10,7 +10,9 @@
 #include "Value.h"
 #include "Token.h"
 #include <QString>
+#include <QStringList>
 #include <QVector>
+#include <QHash>
 #include <memory>
 
 namespace nx {
@@ -245,6 +247,18 @@ public:
 // =============================================================================
 // Sub / Function declaration  (top-level units in a compilation unit)
 // =============================================================================
+// One [Activity(...)] annotation: a flat key->value map.  Values can be
+// strings ("X"), identifiers (ServerOnly), or numbers — the interpreter
+// stores them as Values and consumers (Interpreter::call, RPC bridge,
+// permissions check) read them back by name.
+struct SubAnnotation {
+    QHash<QString, Value> args;       // case-insensitive lookup keys
+
+    Value   get  (const QString &key) const { return args.value(key.toLower()); }
+    QString text (const QString &key) const { return get(key).toText(); }
+    bool    has  (const QString &key) const { return args.contains(key.toLower()); }
+};
+
 class SubDecl {
 public:
     QString          name;
@@ -252,6 +266,19 @@ public:
     QVector<StmtPtr> body;
     bool             isFunction { false };       // true = Function, false = Sub
     int              line { 0 };
+
+    // [Activity(RunsOn := ServerOnly, RequiresPermission := "Sales.Approve")]
+    // The annotation map is empty when the source has no [Activity(...)].
+    SubAnnotation    annotation;
+
+    // Convenience helpers — the interpreter and RPC bridge consult these
+    // before deciding where to execute a call.
+    QString runsOn() const {
+        QString v = annotation.text("RunsOn").trimmed();
+        return v.isEmpty() ? QString("Either") : v;
+    }
+    bool isServerOnly() const { return runsOn().compare("ServerOnly", Qt::CaseInsensitive) == 0; }
+    bool isClientOnly() const { return runsOn().compare("ClientOnly", Qt::CaseInsensitive) == 0; }
 };
 
 // A whole .aba/.frm code section parses into a Program: one SubDecl per

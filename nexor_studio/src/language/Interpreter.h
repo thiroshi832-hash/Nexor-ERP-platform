@@ -69,6 +69,21 @@ public:
     void registerProcess(const QString &name, ProcessRunner runner);
     bool hasProcess(const QString &name) const;
 
+    // Host role — drives the RunsOn dispatch in call().
+    //   "client"  : ServerOnly subs are routed through the RPC bridge.
+    //   "server"  : ServerOnly subs run locally; ClientOnly subs error.
+    //   "either"  : everything runs locally (default; Studio + tests).
+    enum class HostRole { Either, Client, Server };
+    void     setHostRole(HostRole r) { m_hostRole = r; }
+    HostRole hostRole() const        { return m_hostRole; }
+
+    // RPC bridge — installed by the client host (Flux) so that calls to
+    // a [Activity(RunsOn := ServerOnly)] sub get forwarded to Core.  The
+    // bridge takes (subName, args) and returns the result Value.
+    using RpcBridge = std::function<Value(const QString &subName,
+                                          const QVector<Value> &args)>;
+    void setRpcBridge(RpcBridge b) { m_rpcBridge = std::move(b); }
+
     // Process-level shared variables — the magic identifier "Vars" resolves
     // to a dictionary that step bodies can read and write:
     //     Vars.Total = 42
@@ -136,6 +151,8 @@ private:
     FormHandler    m_formHandler;
     FormReader     m_formReader;
     FormWriter     m_formWriter;
+    HostRole       m_hostRole { HostRole::Either };
+    RpcBridge      m_rpcBridge;
 };
 
 } // namespace nx

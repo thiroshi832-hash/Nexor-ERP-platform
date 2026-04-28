@@ -35,6 +35,14 @@ void  Entity::set(const QString &name, const Value &v) {
     if (lc(name) == "id") m_id = v.toLong();
 }
 
+QStringList Entity::fieldNames() const {
+    QStringList out;
+    for (auto it = m_fields.constBegin(); it != m_fields.constEnd(); ++it)
+        out.append(it.key());
+    out.sort();
+    return out;
+}
+
 // ─── EntityTable ────────────────────────────────────────────────────────
 EntityTable::EntityTable(QSqlDatabase db, SheetSchema schema)
     : m_db(std::move(db)), m_schema(std::move(schema)) {}

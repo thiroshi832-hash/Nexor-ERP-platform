@@ -1,8 +1,10 @@
 #include "Interpreter.h"
 #include <QDateTime>
-#include <QMessageBox>
 #include <stdexcept>
 #include <cmath>
+#if defined(NEXOR_HAS_WIDGETS)
+#  include <QMessageBox>
+#endif
 
 namespace nx {
 
@@ -103,6 +105,20 @@ Value Interpreter::call(const QString &name, const QVector<Value> &args) {
         return Value();
     }
     SubPtr s = it.value();
+
+    // RunsOn dispatch — the heart of split execution.
+    if (s->isServerOnly() && m_hostRole == HostRole::Client) {
+        if (m_rpcBridge) return m_rpcBridge(s->name, args);
+        m_lastError = QString("[ServerOnly] '%1' called from client without an "
+                              "RPC bridge installed.").arg(s->name);
+        if (m_errorOut) m_errorOut(m_lastError);
+        return Value();
+    }
+    if (s->isClientOnly() && m_hostRole == HostRole::Server) {
+        m_lastError = QString("[ClientOnly] '%1' cannot run on the server.").arg(s->name);
+        if (m_errorOut) m_errorOut(m_lastError);
+        return Value();
+    }
 
     // Build a child env with the parameters bound.
     auto env = std::make_shared<Environment>(m_globals);
@@ -560,9 +576,13 @@ void Interpreter::installBuiltins() {
         if (ip.m_output) ip.m_output(out);
         return Value();
     });
-    registerBuiltin("MsgBox", [](Interpreter&, const QVector<Value> &a) {
-        QMessageBox::information(nullptr, "Nexor",
-            argText(a, 0));
+    registerBuiltin("MsgBox", [](Interpreter &ip, const QVector<Value> &a) {
+        QString msg = argText(a, 0);
+#if defined(NEXOR_HAS_WIDGETS)
+        QMessageBox::information(nullptr, "Nexor", msg);
+#else
+        if (ip.m_output) ip.m_output("MsgBox: " + msg);
+#endif
         return Value();
     });
     registerBuiltin("InputBox", [](Interpreter&, const QVector<Value> &a) {
