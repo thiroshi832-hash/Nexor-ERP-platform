@@ -16,6 +16,8 @@
 #include <QHBoxLayout>
 #include <QColorDialog>
 #include <QFileInfo>
+#include <QCoreApplication>
+#include <QEvent>
 #include <algorithm>
 
 PropertyPanel::PropertyPanel(QWidget *parent) : QWidget(parent) {
@@ -384,6 +386,12 @@ int PropertyPanel::addSectionHeader(const QString &text) {
 }
 
 void PropertyPanel::detachAllEditorsFromTable() {
+    // CRITICAL: QTableWidget::removeCellWidget() internally schedules a
+    // deleteLater() on the widget that was in the cell.  If we leave that
+    // event in the queue, the widget gets destroyed on the next event-loop
+    // tick — long after we've re-attached it elsewhere — and the next access
+    // crashes.  We cancel the pending DeferredDelete with removePostedEvents
+    // so our persistent editors survive the layout rebuild.
     QList<QWidget*> editors {
         m_nameEdit, m_textEdit, m_xSpin, m_ySpin, m_wSpin, m_hSpin,
         m_fgBtn, m_bgBtn, m_visibleRow, m_anchorRow
@@ -393,6 +401,7 @@ void PropertyPanel::detachAllEditorsFromTable() {
         for (int r = 0; r < m_table->rowCount(); ++r) {
             if (m_table->cellWidget(r, 1) == w) {
                 m_table->removeCellWidget(r, 1);
+                QCoreApplication::removePostedEvents(w, QEvent::DeferredDelete);
                 w->setParent(this);   // adopt back, keep alive
                 w->hide();
                 break;
