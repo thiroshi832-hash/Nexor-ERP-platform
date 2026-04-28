@@ -27,7 +27,9 @@ public:
         FileNotFound,
         ParseError,
         VersionMismatch,
-        HashMismatch
+        HashMismatch,
+        SignatureMissing,
+        SignatureMismatch
     };
 
     struct Result {
@@ -46,6 +48,13 @@ public:
     // Same, but parses from an in-memory byte buffer (used by Flux when it
     // streams a package over the network).
     static Result fromBytes(const QByteArray &bytes, bool verifyHash = true);
+
+    // Verifies the manifest's <Signature> against `key` (HMAC-SHA256).  Sets
+    // result.status to SignatureMissing if the package was unsigned and
+    // `key` is non-empty, or SignatureMismatch on hash drift.  Pass an empty
+    // key to skip the check (kept for hosts that don't enforce signing).
+    static Status verifySignature(const Package &pkg, const QByteArray &key,
+                                  QString *messageOut = nullptr);
 };
 
 } // namespace nx

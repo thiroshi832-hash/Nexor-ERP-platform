@@ -3,6 +3,7 @@
 #include <QFile>
 #include <QXmlStreamReader>
 #include <QCryptographicHash>
+#include <QMessageAuthenticationCode>
 
 namespace nx {
 
@@ -99,6 +100,11 @@ PackageReader::Result PackageReader::fromBytes(const QByteArray &bytes, bool ver
             if (res.package.meta.hashAlgo.isEmpty()) res.package.meta.hashAlgo = "sha256";
             res.package.meta.hash     = r.readElementText();
         }
+        else  if (name == "Signature") {
+            res.package.meta.sigAlgo = r.attributes().value("algo").toString();
+            if (res.package.meta.sigAlgo.isEmpty()) res.package.meta.sigAlgo = "hmac-sha256";
+            res.package.meta.signature = r.readElementText();
+        }
         else  if (name == "Activities") readEntrySection(r, "Activities", "Activity", res.package.activities);
         else  if (name == "Forms")      readEntrySection(r, "Forms",      "Form",     res.package.forms);
         else  if (name == "Sheets")     readEntrySection(r, "Sheets",     "Sheet",    res.package.sheets);
@@ -122,6 +128,31 @@ PackageReader::Result PackageReader::fromBytes(const QByteArray &bytes, bool ver
         }
     }
     return res;
+}
+
+PackageReader::Status PackageReader::verifySignature(const Package &pkg,
+                                                     const QByteArray &key,
+                                                     QString *messageOut) {
+    if (key.isEmpty()) return Status::Ok;
+    if (pkg.meta.signature.isEmpty()) {
+        if (messageOut) *messageOut = "Package is unsigned but a signing key is required.";
+        return Status::SignatureMissing;
+    }
+    QMessageAuthenticationCode mac(QCryptographicHash::Sha256);
+    mac.setKey(key);
+    mac.addData(pkg.meta.id.toUtf8());      mac.addData("\x1f", 1);
+    mac.addData(pkg.meta.version.toUtf8()); mac.addData("\x1f", 1);
+    mac.addData(pkg.meta.builtAt.toUTC().toString(Qt::ISODate).toUtf8());
+    mac.addData("\x1f", 1);
+    mac.addData(pkg.meta.hash.toUtf8());
+    QString actual = QString::fromLatin1(mac.result().toHex());
+    if (actual.compare(pkg.meta.signature, Qt::CaseInsensitive) != 0) {
+        if (messageOut)
+            *messageOut = "Signature mismatch: manifest=" + pkg.meta.signature +
+                          " actual=" + actual;
+        return Status::SignatureMismatch;
+    }
+    return Status::Ok;
 }
 
 PackageReader::Result PackageReader::fromFile(const QString &path, bool verifyHash) {

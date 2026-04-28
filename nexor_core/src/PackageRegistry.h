@@ -61,6 +61,13 @@ public:
     bool open(QString *error = nullptr);
     bool isOpen() const;
 
+    // Optional HMAC-SHA256 signing key.  When non-empty, every publish() call
+    // requires the package's manifest to carry a matching <Signature>; bytes
+    // missing or mis-signed are rejected before disk is touched.  An empty
+    // key keeps Core in permissive mode (the default).
+    void       setSigningKey(const QByteArray &key) { m_signingKey = key; }
+    QByteArray signingKey() const                   { return m_signingKey; }
+
     // Persists `bytes` under <root>/packages/<id>/<version>.nexor and inserts
     // (or updates) the metadata row.  The .nexor is parsed via PackageReader
     // (built into Core via the studio source tree) so we can pull its title /
@@ -69,7 +76,13 @@ public:
                  RegistryRecord &outRecord,
                  QString *error = nullptr);
 
+    // Admin operations — flip a row's status.  Returns false if the row
+    // doesn't exist or the requested transition is meaningless.
+    bool deploy  (const QString &id, const QString &version, QString *error = nullptr);
+    bool rollback(const QString &id, const QString &version, QString *error = nullptr);
+
     QVector<RegistryRecord> list() const;
+    QVector<RegistryRecord> list(const QString &statusFilter) const;
     bool                    find(const QString &id, const QString &version,
                                  RegistryRecord &out) const;
     QByteArray              read(const QString &id, const QString &version) const;
@@ -82,6 +95,7 @@ private:
     QString       m_root;
     QSqlDatabase  m_db;
     QString       m_dbName;     // unique connection name
+    QByteArray    m_signingKey;
     bool          m_open { false };
 };
 

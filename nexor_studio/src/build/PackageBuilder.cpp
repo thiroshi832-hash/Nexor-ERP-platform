@@ -9,6 +9,7 @@
 #include <QDir>
 #include <QXmlStreamWriter>
 #include <QCryptographicHash>
+#include <QMessageAuthenticationCode>
 #include <QDateTime>
 
 namespace nx {
@@ -53,6 +54,22 @@ QString computeHash(const Package &p) {
         h.addData(r.data);           h.addData("\x1e", 1);
     }
     return QString::fromLatin1(h.result().toHex());
+}
+
+// Signature is HMAC-SHA256 over (id|version|builtAt|hash) — that is, over the
+// pieces of the manifest that pin a package's identity.  Tampering with any
+// artifact changes `hash`, which changes the signature, so signing the hash
+// transitively signs the contents.
+QString computeSignature(const Package &p, const QByteArray &key) {
+    if (key.isEmpty()) return {};
+    QMessageAuthenticationCode mac(QCryptographicHash::Sha256);
+    mac.setKey(key);
+    mac.addData(p.meta.id.toUtf8());        mac.addData("\x1f", 1);
+    mac.addData(p.meta.version.toUtf8());   mac.addData("\x1f", 1);
+    mac.addData(p.meta.builtAt.toUTC().toString(Qt::ISODate).toUtf8());
+    mac.addData("\x1f", 1);
+    mac.addData(p.meta.hash.toUtf8());
+    return QString::fromLatin1(mac.result().toHex());
 }
 
 // Writes a section of homogeneous entries: <Forms><Form …><![CDATA[…]]>…
@@ -161,8 +178,9 @@ bool PackageBuilder::collect(const Project &project, Package &out, QString *erro
     return true;
 }
 
-QByteArray PackageBuilder::serialise(Package &package) {
-    package.meta.hash = computeHash(package);
+QByteArray PackageBuilder::serialise(Package &package, const QByteArray &signingKey) {
+    package.meta.hash      = computeHash(package);
+    package.meta.signature = computeSignature(package, signingKey);
 
     QByteArray buf;
     QXmlStreamWriter w(&buf);
@@ -182,6 +200,12 @@ QByteArray PackageBuilder::serialise(Package &package) {
     w.writeAttribute("algo", package.meta.hashAlgo);
     w.writeCharacters(package.meta.hash);
     w.writeEndElement();
+    if (!package.meta.signature.isEmpty()) {
+        w.writeStartElement("Signature");
+        w.writeAttribute("algo", package.meta.sigAlgo);
+        w.writeCharacters(package.meta.signature);
+        w.writeEndElement();
+    }
     w.writeEndElement(); // Meta
 
     writeEntrySection(w, "Activities", "Activity", package.activities);
@@ -206,7 +230,9 @@ QByteArray PackageBuilder::serialise(Package &package) {
 }
 
 PackageBuilder::Result
-PackageBuilder::buildAndWrite(const Project &project, const QString &version) {
+PackageBuilder::buildAndWrite(const Project &project,
+                              const QString &version,
+                              const QByteArray &signingKey) {
     Result r;
 
     Package pkg;
@@ -217,7 +243,7 @@ PackageBuilder::buildAndWrite(const Project &project, const QString &version) {
     pkg.meta.builtAt  = QDateTime::currentDateTimeUtc();
     pkg.meta.builder  = "Nexor Studio 0.1.0";
 
-    QByteArray bytes = serialise(pkg);
+    QByteArray bytes = serialise(pkg, signingKey);
 
     QString root = project.rootDir();
     QString distDir  = root + "/dist";

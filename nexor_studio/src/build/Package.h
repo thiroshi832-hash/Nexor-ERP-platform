@@ -64,6 +64,11 @@ struct PackageMeta {
     QString   builder;     // tool that produced the package
     QString   hash;        // sha256 hex over canonical content
     QString   hashAlgo { "sha256" };
+
+    // Signature over the canonical content + manifest hash.  Empty for
+    // unsigned packages (acceptable to a Core started without --signing-key).
+    QString   signature;             // hex digest, currently HMAC-SHA256
+    QString   sigAlgo  { "hmac-sha256" };
 };
 
 // Whole-package payload — what PackageBuilder writes and PackageReader yields.

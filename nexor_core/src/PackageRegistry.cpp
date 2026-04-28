@@ -87,6 +87,20 @@ bool PackageRegistry::publish(const QByteArray &bytes,
         return false;
     }
 
+    // Signature check — when Core was started with --signing-key, every
+    // upload must carry a matching <Signature>.  Without a key Core stays
+    // permissive (the default for dev / first-run).
+    if (!m_signingKey.isEmpty()) {
+        QString sigMsg;
+        auto sst = PackageReader::verifySignature(rd.package, m_signingKey, &sigMsg);
+        if (sst != PackageReader::Status::Ok) {
+            if (error) *error = (sst == PackageReader::Status::SignatureMissing)
+                ? "Package is unsigned but Core requires signed uploads."
+                : ("Signature mismatch: " + sigMsg);
+            return false;
+        }
+    }
+
     // Write bytes to <root>/packages/<id>/<version>.nexor
     QString pkgDir = QDir(m_root).absoluteFilePath("packages/" + rd.package.meta.id);
     if (!QDir().mkpath(pkgDir)) {
@@ -144,13 +158,21 @@ bool PackageRegistry::publish(const QByteArray &bytes,
 }
 
 QVector<RegistryRecord> PackageRegistry::list() const {
+    return list(QString());
+}
+
+QVector<RegistryRecord> PackageRegistry::list(const QString &statusFilter) const {
     QVector<RegistryRecord> out;
     if (!m_open) return out;
     QSqlQuery q(m_db);
-    q.prepare("SELECT id, version, title, built_at, hash, hash_algo, byte_size,"
-              "       received_at, file_path, status"
-              "  FROM package_versions"
-              " ORDER BY received_at DESC, id ASC, version ASC");
+    QString sql =
+        "SELECT id, version, title, built_at, hash, hash_algo, byte_size,"
+        "       received_at, file_path, status"
+        "  FROM package_versions";
+    if (!statusFilter.isEmpty()) sql += " WHERE status = :status";
+    sql += " ORDER BY received_at DESC, id ASC, version ASC";
+    q.prepare(sql);
+    if (!statusFilter.isEmpty()) q.bindValue(":status", statusFilter);
     if (!q.exec()) return out;
     while (q.next()) {
         RegistryRecord r;
@@ -167,6 +189,62 @@ QVector<RegistryRecord> PackageRegistry::list() const {
         out.append(r);
     }
     return out;
+}
+
+bool PackageRegistry::deploy(const QString &id, const QString &version,
+                             QString *error) {
+    if (!m_open) { if (error) *error = "Registry not open."; return false; }
+    RegistryRecord cur;
+    if (!find(id, version, cur)) {
+        if (error) *error = "No such package version.";
+        return false;
+    }
+    QSqlQuery q(m_db);
+    // Demote any previously-live row of the same id to 'rolled_back', then
+    // promote this one to 'live'.  Two-step because SQLite can't UPDATE …
+    // FROM and we want a sane history trail.
+    q.prepare("UPDATE package_versions SET status='rolled_back'"
+              " WHERE id=:id AND status='live' AND version != :ver");
+    q.bindValue(":id", id);
+    q.bindValue(":ver", version);
+    if (!q.exec()) {
+        if (error) *error = "Demote step failed: " + q.lastError().text();
+        return false;
+    }
+    QSqlQuery up(m_db);
+    up.prepare("UPDATE package_versions SET status='live'"
+               " WHERE id=:id AND version=:ver");
+    up.bindValue(":id", id);
+    up.bindValue(":ver", version);
+    if (!up.exec()) {
+        if (error) *error = "Promote step failed: " + up.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool PackageRegistry::rollback(const QString &id, const QString &version,
+                               QString *error) {
+    if (!m_open) { if (error) *error = "Registry not open."; return false; }
+    RegistryRecord cur;
+    if (!find(id, version, cur)) {
+        if (error) *error = "No such package version.";
+        return false;
+    }
+    if (cur.status != "live") {
+        if (error) *error = "Only live packages can be rolled back.";
+        return false;
+    }
+    QSqlQuery q(m_db);
+    q.prepare("UPDATE package_versions SET status='rolled_back'"
+              " WHERE id=:id AND version=:ver");
+    q.bindValue(":id", id);
+    q.bindValue(":ver", version);
+    if (!q.exec()) {
+        if (error) *error = "Rollback failed: " + q.lastError().text();
+        return false;
+    }
+    return true;
 }
 
 bool PackageRegistry::find(const QString &id, const QString &version,

@@ -5,6 +5,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QUrlQuery>
 
 namespace nx {
 
@@ -29,6 +30,29 @@ QJsonObject recordToJson(const RegistryRecord &r) {
     return o;
 }
 
+// Bearer-token check.  Returns true when the request carries a matching
+// Authorization: Bearer <token>.  An empty configured token short-circuits
+// to "allow" so Core can start in permissive mode.
+bool checkBearer(const HttpRequest &req, const QString &expected,
+                 HttpResponse &res) {
+    if (expected.isEmpty()) return true;
+    QString got = req.header("Authorization");
+    QString prefix = "Bearer ";
+    if (!got.startsWith(prefix, Qt::CaseInsensitive)) {
+        res.setStatus(401, "Unauthorized");
+        res.headers.insert("WWW-Authenticate", "Bearer realm=\"NexorCore\"");
+        res.setJson(jsonError("Missing or malformed Authorization header."));
+        return false;
+    }
+    if (got.mid(prefix.size()).trimmed() != expected) {
+        res.setStatus(401, "Unauthorized");
+        res.headers.insert("WWW-Authenticate", "Bearer realm=\"NexorCore\"");
+        res.setJson(jsonError("Invalid bearer token."));
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 PackageApi::PackageApi(Router *router, PackageRegistry *registry)
@@ -36,7 +60,7 @@ PackageApi::PackageApi(Router *router, PackageRegistry *registry)
       m_startedAt(QDateTime::currentDateTimeUtc()) {}
 
 void PackageApi::registerRoutes() {
-    // Health — sanity probe + cheap "yes the build linked" check.
+    // Health — sanity probe.  Always open.
     m_router->route("GET", "/api/v1/health",
         [started = m_startedAt](const HttpRequest&, HttpResponse &res) {
             QJsonObject o;
@@ -47,9 +71,11 @@ void PackageApi::registerRoutes() {
             res.setJson(QJsonDocument(o).toJson(QJsonDocument::Compact));
         });
 
-    // POST /api/v1/packages — receive a .nexor.
+    // POST /api/v1/packages — receive a .nexor.  Bearer-protected.
     m_router->route("POST", "/api/v1/packages",
-        [reg = m_registry](const HttpRequest &req, HttpResponse &res) {
+        [reg = m_registry, tok = m_adminToken](const HttpRequest &req,
+                                                HttpResponse &res) {
+            if (!checkBearer(req, tok, res)) return;
             if (req.body.isEmpty()) {
                 res.setStatus(400, "Bad Request");
                 res.setJson(jsonError("Empty body."));
@@ -66,7 +92,7 @@ void PackageApi::registerRoutes() {
                             .toJson(QJsonDocument::Compact));
         });
 
-    // GET /api/v1/packages — list everything.
+    // GET /api/v1/packages — list everything (open).
     m_router->route("GET", "/api/v1/packages",
         [reg = m_registry](const HttpRequest&, HttpResponse &res) {
             QJsonArray arr;
@@ -74,7 +100,7 @@ void PackageApi::registerRoutes() {
             res.setJson(QJsonDocument(arr).toJson(QJsonDocument::Compact));
         });
 
-    // GET /api/v1/packages/:id/:version — download the bytes.
+    // GET /api/v1/packages/:id/:version — download the bytes (open).
     m_router->route("GET", "/api/v1/packages/:id/:version",
         [reg = m_registry](const HttpRequest &req, HttpResponse &res) {
             QString id  = req.pathParams.value("id");
@@ -87,6 +113,56 @@ void PackageApi::registerRoutes() {
                 return;
             }
             res.setBody(bytes, "application/x-nexor-package");
+        });
+
+    // GET /api/v1/admin/packages[?status=pending|live|rolled_back]
+    m_router->route("GET", "/api/v1/admin/packages",
+        [reg = m_registry, tok = m_adminToken](const HttpRequest &req,
+                                                HttpResponse &res) {
+            if (!checkBearer(req, tok, res)) return;
+            QUrlQuery qq(req.query);
+            QString filter = qq.queryItemValue("status");
+            QJsonArray arr;
+            for (const auto &r : reg->list(filter)) arr.append(recordToJson(r));
+            res.setJson(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+        });
+
+    // POST /api/v1/admin/packages/:id/:version/deploy
+    m_router->route("POST", "/api/v1/admin/packages/:id/:version/deploy",
+        [reg = m_registry, tok = m_adminToken](const HttpRequest &req,
+                                                HttpResponse &res) {
+            if (!checkBearer(req, tok, res)) return;
+            QString id  = req.pathParams.value("id");
+            QString ver = req.pathParams.value("version");
+            QString err;
+            if (!reg->deploy(id, ver, &err)) {
+                res.setStatus(400, "Bad Request");
+                res.setJson(jsonError(err));
+                return;
+            }
+            RegistryRecord r;
+            reg->find(id, ver, r);
+            res.setJson(QJsonDocument(recordToJson(r))
+                            .toJson(QJsonDocument::Compact));
+        });
+
+    // POST /api/v1/admin/packages/:id/:version/rollback
+    m_router->route("POST", "/api/v1/admin/packages/:id/:version/rollback",
+        [reg = m_registry, tok = m_adminToken](const HttpRequest &req,
+                                                HttpResponse &res) {
+            if (!checkBearer(req, tok, res)) return;
+            QString id  = req.pathParams.value("id");
+            QString ver = req.pathParams.value("version");
+            QString err;
+            if (!reg->rollback(id, ver, &err)) {
+                res.setStatus(400, "Bad Request");
+                res.setJson(jsonError(err));
+                return;
+            }
+            RegistryRecord r;
+            reg->find(id, ver, r);
+            res.setJson(QJsonDocument(recordToJson(r))
+                            .toJson(QJsonDocument::Compact));
         });
 }
 
