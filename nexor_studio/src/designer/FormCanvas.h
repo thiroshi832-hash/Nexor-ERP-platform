@@ -84,6 +84,11 @@ private:
     QPoint  bodyOrigin() const;
     QRect   formChromeRect() const;
 
+    // Creates a designed widget on m_body at the given body-local position
+    // (auto-clamped, auto-named, auto-selected).  Used by both the canvas-
+    // level dropEvent and the m_body event filter.
+    void createWidgetAt(const QString &type, const QPoint &bodyCenterPos);
+
     // ── Form spec ────────────────────────────────────────────────────────
     QString m_path;
     QString m_id;

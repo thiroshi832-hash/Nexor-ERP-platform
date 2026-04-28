@@ -55,6 +55,7 @@ FormCanvas::FormCanvas(QWidget *parent) : QWidget(parent) {
     m_body->setStyleSheet(
         "QWidget#formBody { background:#f5f5f5; border:1px solid #1e2030; }");
     m_body->setMouseTracking(true);
+    m_body->setAcceptDrops(true);          // accept palette drops on body
     m_body->installEventFilter(this);
     m_body->resize(m_formW, m_formH);
 
@@ -176,27 +177,27 @@ void FormCanvas::dropEvent(QDropEvent *e) {
     if (m_path.isEmpty()) return;          // no form open
     QString type = QString::fromUtf8(e->mimeData()->data("application/x-nexor-widget"));
     if (type.isEmpty()) return;
+    // Convert from FormCanvas coords to m_body-local coords
+    createWidgetAt(type, e->pos() - bodyOrigin());
+    e->acceptProposedAction();
+}
 
-    // Drop position in canvas coords → body coords
-    QPoint canvasPos = e->pos();
-    QPoint bodyPos = canvasPos - bodyOrigin();
-
-    // Clamp inside body rect
+void FormCanvas::createWidgetAt(const QString &type, const QPoint &bodyCenterPos) {
+    if (type.isEmpty()) return;
     QSize ds = WidgetFactory::defaultSize(type);
-    bodyPos.setX(qBound(0, bodyPos.x() - ds.width()/2,  m_formW - ds.width()));
-    bodyPos.setY(qBound(0, bodyPos.y() - ds.height()/2, m_formH - ds.height()));
-
+    QPoint pos(
+        qBound(0, bodyCenterPos.x() - ds.width()  / 2, m_formW - ds.width()),
+        qBound(0, bodyCenterPos.y() - ds.height() / 2, m_formH - ds.height())
+    );
     QWidget *w = WidgetFactory::create(type, m_body);
     if (!w) return;
-    w->setGeometry(bodyPos.x(), bodyPos.y(), ds.width(), ds.height());
+    w->setGeometry(pos.x(), pos.y(), ds.width(), ds.height());
     w->show();
     w->installEventFilter(this);
-
     Item it { type, uniqueName(WidgetFactory::namePrefix(type)), w };
     m_items.append(it);
     selectWidget(w);
     emit modified();
-    e->acceptProposedAction();
 }
 
 // ─── Selection & geometry helpers ──────────────────────────────────────
@@ -321,14 +322,37 @@ void FormCanvas::mousePressEvent(QMouseEvent *e) {
 }
 
 bool FormCanvas::eventFilter(QObject *obj, QEvent *event) {
-    // ── Click on body (empty form area) → deselect ───────────────────
+    // ── Drops & clicks on the form body ──────────────────────────────
     if (obj == m_body) {
-        if (event->type() == QEvent::MouseButtonPress) {
+        switch (event->type()) {
+        case QEvent::DragEnter:
+        case QEvent::DragMove: {
+            auto *de = static_cast<QDragMoveEvent*>(event);
+            if (!m_path.isEmpty()
+             && de->mimeData()->hasFormat("application/x-nexor-widget")) {
+                de->acceptProposedAction();
+                return true;
+            }
+            return false;
+        }
+        case QEvent::Drop: {
+            auto *de = static_cast<QDropEvent*>(event);
+            if (m_path.isEmpty()) return false;
+            if (!de->mimeData()->hasFormat("application/x-nexor-widget")) return false;
+            QString type = QString::fromUtf8(
+                de->mimeData()->data("application/x-nexor-widget"));
+            // de->pos() is already in m_body coords
+            createWidgetAt(type, de->pos());
+            de->acceptProposedAction();
+            return true;
+        }
+        case QEvent::MouseButtonPress:
             selectWidget(nullptr);
             setFocus(Qt::MouseFocusReason);
             return false;
+        default:
+            return false;
         }
-        return false;
     }
 
     // ── Selection handle drag (resize) ───────────────────────────────
