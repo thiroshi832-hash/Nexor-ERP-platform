@@ -42,6 +42,10 @@ public:
     QString currentFormTitle() const { return m_title; }
     QSize   currentFormSize()  const { return QSize(m_formW, m_formH); }
 
+    // The Sheet/entity this form edits (empty = no binding).
+    QString dataSource()       const { return m_dataSource; }
+    void    setDataSource(const QString &s);
+
     void    setFormTitle(const QString &t);
     void    setFormSize(const QSize &s);
 
@@ -69,8 +73,12 @@ public:
     void   setFormGeometryFromPanel(const QRect &g);   // for X/Y/W/H of form
 
     // Public to allow the FormRunner to walk the design.
-    struct Item { QString type; QString name; QWidget *widget; };
+    struct Item { QString type; QString name; QString binding; QWidget *widget; };
     const QVector<Item>& items() const { return m_items; }
+
+    // Sets the binding (entity field name) for the currently-selected widget.
+    void setBindingForSelected(const QString &fieldName);
+    QString bindingForSelected() const;
 
     // Reorders m_items to match the supplied widget-name list.  Also calls
     // QWidget::setTabOrder so the actual focus chain reflects the new order.
@@ -127,6 +135,7 @@ private:
     QString m_id;
     QString m_title;
     QString m_code;
+    QString m_dataSource;     // Sheet id (empty = no entity binding)
     QColor  m_formFg;
     QColor  m_formBg;
     int     m_formW { 640 };

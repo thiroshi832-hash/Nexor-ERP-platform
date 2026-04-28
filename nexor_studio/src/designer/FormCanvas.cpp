@@ -220,7 +220,7 @@ void FormCanvas::createWidgetAt(const QString &type, const QPoint &bodyCenterPos
     w->setGeometry(pos.x(), pos.y(), ds.width(), ds.height());
     w->show();
     w->installEventFilter(this);
-    Item it { type, uniqueName(WidgetFactory::namePrefix(type)), w };
+    Item it { type, uniqueName(WidgetFactory::namePrefix(type)), QString(), w };
     m_items.append(it);
     selectWidget(w);
     emit modified();
@@ -383,6 +383,23 @@ void FormCanvas::setGeometryForSelected(const QRect &g) {
 
 void FormCanvas::setFormTitle(const QString &t) {
     m_title = t; update(); emit modified();
+}
+
+void FormCanvas::setDataSource(const QString &s) {
+    m_dataSource = s.trimmed();
+    emit modified();
+}
+
+void FormCanvas::setBindingForSelected(const QString &fieldName) {
+    int i = itemIndexFor(m_selected);
+    if (i < 0) return;
+    m_items[i].binding = fieldName.trimmed();
+    emit modified();
+}
+
+QString FormCanvas::bindingForSelected() const {
+    int i = itemIndexFor(const_cast<FormCanvas*>(this)->m_selected);
+    return i < 0 ? QString() : m_items[i].binding;
 }
 
 void FormCanvas::setFormSize(const QSize &s) {
@@ -644,6 +661,7 @@ void FormCanvas::cleanupAllWidgets() {
 void FormCanvas::clearForm() {
     cleanupAllWidgets();
     m_path.clear(); m_id.clear(); m_title.clear(); m_code.clear();
+    m_dataSource.clear();
     m_formW = 640; m_formH = 480;
     m_formFg = QColor(); m_formBg = QColor();
     m_formSelected = false;
@@ -663,7 +681,7 @@ bool FormCanvas::loadForm(const QString &filePath) {
     }
     cleanupAllWidgets();
     m_path = filePath;
-    m_id.clear(); m_title.clear(); m_code.clear();
+    m_id.clear(); m_title.clear(); m_code.clear(); m_dataSource.clear();
     m_formW = 640; m_formH = 480;
 
     QXmlStreamReader r(&f);
@@ -681,7 +699,9 @@ bool FormCanvas::loadForm(const QString &filePath) {
         if (r.isStartElement()) {
             const QStringRef n = r.name();
             if (n == "Form") {
-                m_id = r.attributes().value("id").toString();
+                const auto a = r.attributes();
+                m_id         = a.value("id").toString();
+                m_dataSource = a.value("dataSource").toString();
                 inFormProps = true;
             } else if (n == "Geometry") {
                 const auto a = r.attributes();
@@ -702,6 +722,7 @@ bool FormCanvas::loadForm(const QString &filePath) {
                 cy = a.value("y").toInt();
                 cw = a.value("width").toInt();
                 ch = a.value("height").toInt();
+                cProps["__binding"] = a.value("binding").toString();
             } else if (n == "Property") {
                 QString pn = r.attributes().value("name").toString();
                 QString pv = r.readElementText();
@@ -730,6 +751,7 @@ bool FormCanvas::loadForm(const QString &filePath) {
                               cName.isEmpty()
                                 ? uniqueName(WidgetFactory::namePrefix(cType))
                                 : cName,
+                              cProps.value("__binding"),
                               w };
                     m_items.append(it);
                 }
@@ -762,6 +784,8 @@ bool FormCanvas::saveForm() {
     w.writeStartElement("Form");
     w.writeAttribute("version", "1");
     w.writeAttribute("id", m_id);
+    if (!m_dataSource.isEmpty())
+        w.writeAttribute("dataSource", m_dataSource);
 
     w.writeStartElement("Geometry");
     w.writeAttribute("x", "100");
@@ -794,6 +818,8 @@ bool FormCanvas::saveForm() {
         w.writeAttribute("y",      QString::number(it.widget->y()));
         w.writeAttribute("width",  QString::number(it.widget->width()));
         w.writeAttribute("height", QString::number(it.widget->height()));
+        if (!it.binding.isEmpty())
+            w.writeAttribute("binding", it.binding);
 
         if (WidgetFactory::hasTextProperty(it.type))
             writeProp("text", WidgetFactory::readProperty(it.widget, "text").toString());

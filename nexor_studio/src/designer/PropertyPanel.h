@@ -62,6 +62,8 @@ private slots:
     void onBgClicked();
     void onVisibleToggled(bool v);
     void onAnchorToggled();
+    void onDataSourceEdited();
+    void onBindingEdited();
 
 private:
     enum Mode { ModeEmpty, ModeWidget, ModeForm };
@@ -118,6 +120,8 @@ private:
     QToolButton *m_anchorB;
     QWidget     *m_visibleRow;       // wrapper around m_visibleCheck
     QWidget     *m_anchorRow;        // wrapper around the 4 anchor buttons
+    QLineEdit   *m_dataSourceEdit;   // form-only: which Sheet this form edits
+    QLineEdit   *m_bindingEdit;      // widget-only: which entity field
 
     QHash<QString, QString> m_descriptions;
 };

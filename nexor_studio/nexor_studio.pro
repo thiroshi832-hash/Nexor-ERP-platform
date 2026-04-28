@@ -22,6 +22,7 @@ SOURCES += \
     src/designer/WidgetPalette.cpp \
     src/designer/DesignerView.cpp \
     src/runtime/FormRunner.cpp \
+    src/runtime/WidgetValue.cpp \
     src/language/Lexer.cpp \
     src/language/Parser.cpp \
     src/language/Value.cpp \
@@ -54,6 +55,7 @@ HEADERS += \
     src/designer/WidgetPalette.h \
     src/designer/DesignerView.h \
     src/runtime/FormRunner.h \
+    src/runtime/WidgetValue.h \
     src/language/Token.h \
     src/language/Lexer.h \
     src/language/Ast.h \
