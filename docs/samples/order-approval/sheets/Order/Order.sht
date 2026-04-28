@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Sheet version="1">
+    <Meta>
+        <Title>Order</Title>
+        <Id>Order</Id>
+        <Description>Customer purchase order with approval state.</Description>
+        <Author>nexor docs</Author>
+        <Created>2026-04-29T10:00:00</Created>
+    </Meta>
+    <Fields>
+        <Field name="Id"          type="Long"    key="true" required="true"/>
+        <Field name="CustomerId"  type="Long"    required="true"/>
+        <Field name="Total"       type="Decimal" required="true"/>
+        <Field name="Approved"    type="Boolean" default="false"/>
+        <Field name="Approver"    type="String"/>
+        <Field name="ApprovedAt"  type="Date"/>
+    </Fields>
+</Sheet>

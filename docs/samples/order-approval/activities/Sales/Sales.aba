@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Activity version="1">
+  <Meta>
+    <Title>Sales</Title>
+    <Id>Sales</Id>
+    <Description>Order entry + approval workflow kick-off.</Description>
+    <Author>nexor docs</Author>
+    <Created>2026-04-29T10:00:00</Created>
+  </Meta>
+  <Forms>
+    <Form>OrderEntry.frm</Form>
+    <Form>Approve.frm</Form>
+  </Forms>
+  <Code>Sub Main()
+    If Order.Count() = 0 Then
+        SeedDemoOrders()
+    End If
+    Print "Order table has " &amp; Order.Count() &amp; " row(s)."
+End Sub
+
+Sub SeedDemoOrders()
+    Dim small = Order.New()
+    small.CustomerId = 1
+    small.Total      = 250
+    small.Approved   = False
+    small.Save()
+
+    Dim big = Order.New()
+    big.CustomerId = 2
+    big.Total      = 1500
+    big.Approved   = False
+    big.Save()
+End Sub
+</Code>
+</Activity>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Activity version="1">
+  <Meta>
+    <Title>Hi</Title>
+    <Id>Hi</Id>
+    <Description>Sample greeter.</Description>
+    <Author>nexor docs</Author>
+    <Created>2026-04-29T10:00:00</Created>
+  </Meta>
+  <Forms>
+    <Form>Hi_main.frm</Form>
+  </Forms>
+  <Code>Sub Main()
+    Print "Hello from Sub Main"
+End Sub
+</Code>
+</Activity>

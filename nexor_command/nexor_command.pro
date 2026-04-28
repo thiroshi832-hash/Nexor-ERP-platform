@@ -21,6 +21,9 @@ HEADERS += \
     src/DiffDialog.h \
     src/AuditDialog.h
 
+RC_FILE     = nexor_command.rc
+RESOURCES  += nexor_command.qrc
+
 DESTDIR     = $$PWD/../bin
 OBJECTS_DIR = $$PWD/build/obj
 MOC_DIR     = $$PWD/build/moc

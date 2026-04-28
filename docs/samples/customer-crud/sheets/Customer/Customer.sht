@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Sheet version="1">
+    <Meta>
+        <Title>Customer</Title>
+        <Id>Customer</Id>
+        <Description>Master record of trading partners.</Description>
+        <Author>nexor docs</Author>
+        <Created>2026-04-29T10:00:00</Created>
+    </Meta>
+    <Fields>
+        <Field name="Id"      type="Long"    key="true" required="true"/>
+        <Field name="Name"    type="String"  required="true"/>
+        <Field name="Email"   type="String"/>
+        <Field name="Balance" type="Decimal" default="0"/>
+        <Field name="Active"  type="Boolean" default="true"/>
+    </Fields>
+</Sheet>

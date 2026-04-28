@@ -95,6 +95,9 @@ HEADERS += \
     src/dialogs/TabOrderDialog.h \
     src/language/EntityStore.h
 
+RC_FILE     = nexor_studio.rc
+RESOURCES  += nexor_studio.qrc
+
 DESTDIR     = $$PWD/../bin
 OBJECTS_DIR = $$PWD/build/obj
 MOC_DIR     = $$PWD/build/moc

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Activity version="1">
+  <Meta>
+    <Title>Sales</Title>
+    <Id>Sales</Id>
+    <Description>Customer maintenance UI.</Description>
+    <Author>nexor docs</Author>
+    <Created>2026-04-29T10:00:00</Created>
+  </Meta>
+  <Forms>
+    <Form>Customer_form.frm</Form>
+    <Form>Customer_list.frm</Form>
+  </Forms>
+  <Code>Sub Main()
+    If Customer.Count() = 0 Then
+        SeedDemoData()
+    End If
+    Print "Customer table has " &amp; Customer.Count() &amp; " row(s)."
+End Sub
+
+Sub SeedDemoData()
+    Dim a = Customer.New()
+    a.Name    = "Acme"
+    a.Email   = "billing@acme.com"
+    a.Balance = 1234.56
+    a.Active  = True
+    a.Save()
+    Dim b = Customer.New()
+    b.Name    = "Globex"
+    b.Email   = "ar@globex.com"
+    b.Balance = 42.0
+    b.Active  = True
+    b.Save()
+End Sub
+
+[Activity(RunsOn := Either)]
+Function FormatBalance(amt) As String
+    Return "$" &amp; Round(amt, 2)
+End Function
+</Code>
+</Activity>

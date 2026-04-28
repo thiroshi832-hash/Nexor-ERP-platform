@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file alias="app.png">../icons/nexor_command.png</file>
+    </qresource>
+</RCC>

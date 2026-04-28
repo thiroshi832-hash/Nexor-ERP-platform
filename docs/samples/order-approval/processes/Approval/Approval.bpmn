@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:nexor="http://nexor.io/bpmn/v1"
+                  id="Definitions_Approval"
+                  targetNamespace="http://nexor.io/bpmn/v1">
+  <bpmn:process id="Approval" name="Order Approval" isExecutable="true">
+
+    <bpmn:startEvent id="_StartEvent"/>
+
+    <bpmn:scriptTask id="Validate" name="Validate Order" scriptFormat="nexor">
+      <bpmn:script>Dim ord = Order.Find(Vars.OrderId)
+If ord Is Nothing Then
+    Print "no such order " &amp; Vars.OrderId
+    Exit Sub
+End If
+Vars.Total = ord.Total
+Vars.IsBig = ord.Total &gt; 1000
+Print "validated total=" &amp; Vars.Total</bpmn:script>
+    </bpmn:scriptTask>
+
+    <bpmn:exclusiveGateway id="LimitCheck" name="Big enough?"/>
+
+    <bpmn:userTask id="ManagerApprove" name="Manager approves">
+      <bpmn:extensionElements>
+        <nexor:formRef>Approve.frm</nexor:formRef>
+      </bpmn:extensionElements>
+    </bpmn:userTask>
+
+    <bpmn:scriptTask id="AutoApprove" name="Auto-approve" scriptFormat="nexor">
+      <bpmn:script>Vars.Approved = True
+Vars.Approver = "system"
+Print "auto-approved"</bpmn:script>
+    </bpmn:scriptTask>
+
+    <bpmn:scriptTask id="Settle" name="Settle" scriptFormat="nexor">
+      <bpmn:script>Dim ord = Order.Find(Vars.OrderId)
+If ord IsNot Nothing Then
+    ord.Approved   = True
+    ord.Approver   = Vars.Approver
+    ord.ApprovedAt = Now()
+    ord.Save()
+End If
+Print "approver=" &amp; Vars.Approver</bpmn:script>
+    </bpmn:scriptTask>
+
+    <bpmn:endEvent id="End"/>
+
+    <bpmn:sequenceFlow id="f1" sourceRef="_StartEvent"   targetRef="Validate"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="Validate"      targetRef="LimitCheck"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="LimitCheck"    targetRef="ManagerApprove" name="Big">
+      <bpmn:conditionExpression>${returnValue == "Big"}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f4" sourceRef="LimitCheck"    targetRef="AutoApprove" name="Small">
+      <bpmn:conditionExpression>${returnValue == "Small"}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f5" sourceRef="ManagerApprove" targetRef="Settle"/>
+    <bpmn:sequenceFlow id="f6" sourceRef="AutoApprove"    targetRef="Settle"/>
+    <bpmn:sequenceFlow id="f7" sourceRef="Settle"         targetRef="End"/>
+
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Approval">
+      <bpmndi:BPMNShape id="_StartEvent_di" bpmnElement="_StartEvent">
+        <dc:Bounds x="60"  y="120" width="36"  height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Validate_di" bpmnElement="Validate">
+        <dc:Bounds x="160" y="100" width="120" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="LimitCheck_di" bpmnElement="LimitCheck">
+        <dc:Bounds x="320" y="110" width="56"  height="56"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ManagerApprove_di" bpmnElement="ManagerApprove">
+        <dc:Bounds x="420" y="40"  width="120" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="AutoApprove_di" bpmnElement="AutoApprove">
+        <dc:Bounds x="420" y="180" width="120" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Settle_di" bpmnElement="Settle">
+        <dc:Bounds x="600" y="100" width="120" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End">
+        <dc:Bounds x="780" y="120" width="36"  height="36"/>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
