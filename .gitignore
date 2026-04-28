@@ -1,9 +1,11 @@
-# Build directories
-build/
-build-*/
-bin/
-debug/
-release/
+# Build directories — top-level only so src/build/ (Nexor package builder)
+# is not affected.
+/build/
+/bin/
+**/build-*/
+**/debug/
+**/release/
+nexor_studio/build/
 
 # Qt user files
 *.pro.user
