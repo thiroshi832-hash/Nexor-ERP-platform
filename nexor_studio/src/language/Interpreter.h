@@ -69,6 +69,19 @@ public:
     void registerProcess(const QString &name, ProcessRunner runner);
     bool hasProcess(const QString &name) const;
 
+    // Process-level shared variables — the magic identifier "Vars" resolves
+    // to a dictionary that step bodies can read and write:
+    //     Vars.Total = 42
+    //     Print Vars.Total
+    // The host (ProcessEngine) installs a backing store; if no store has
+    // been installed, Vars is silently inert (so a stray Vars.X in a Form
+    // body doesn't crash).
+    using VarStore = QHash<QString, Value>;            // case-insensitive keys
+    void  setVarStore(VarStore *store) { m_varStore = store; }
+    bool  hasVarStore() const          { return m_varStore != nullptr; }
+    Value getVar(const QString &name) const;
+    void  setVar(const QString &name, const Value &v);
+
     // Form bridge — FormRunner installs these so user code that says
     //   Form.Save()        Form.Load(id)        Form.Current.Name
     // dispatches into the live form's data binding.
@@ -112,6 +125,7 @@ private:
     QHash<QString, SubPtr>          m_subs;          // case-insensitive (toLower)
     QHash<QString, BuiltinFn>       m_builtins;
     QHash<QString, ProcessRunner>   m_processes;    // case-insensitive
+    VarStore                       *m_varStore { nullptr };
     EntityStore                     m_store;
 
     OutputCallback m_output;

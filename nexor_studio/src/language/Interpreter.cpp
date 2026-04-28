@@ -25,6 +25,16 @@ bool Interpreter::hasProcess(const QString &name) const {
     return m_processes.contains(name.toLower());
 }
 
+Value Interpreter::getVar(const QString &name) const {
+    if (!m_varStore) return Value();
+    return m_varStore->value(name.toLower(), Value());
+}
+
+void Interpreter::setVar(const QString &name, const Value &v) {
+    if (!m_varStore) return;
+    m_varStore->insert(name.toLower(), v);
+}
+
 // Returns a Value carrying the process name as a simple String holder.
 // kind="Process" + the lowercase-id stored as the object handle (we just use
 // a heap-allocated QString shared_ptr).  Member dispatch finds it via the
@@ -257,6 +267,11 @@ Value Interpreter::evalExpr(Expr *e, std::shared_ptr<Environment> env) {
         if (lo == "form" && (m_formHandler || m_formReader)) {
             return Value::object(std::shared_ptr<void>(), "Form");
         }
+        // 2b. The magic "Vars" name — process-level shared dictionary.
+        //     Inert (Empty member access) when no var store is installed.
+        if (lo == "vars") {
+            return Value::object(std::shared_ptr<void>(), "Vars");
+        }
         // 3. Registered sheet name (Customer, Order, …) → SheetRef value.
         if (m_store.hasSheet(v->name)) return makeSheetRefValue(v->name, &m_store);
         // 3b. Registered process name (OrderApproval, …) → ProcessRef value.
@@ -362,6 +377,10 @@ Value Interpreter::getMember(const Value &obj, const QString &prop) {
     if (obj.kind() == Value::Object && obj.objectKind() == "Form") {
         return m_formReader ? m_formReader(prop) : Value();
     }
+    // Vars dictionary — Vars.<name> reads from the per-process var store.
+    if (obj.kind() == Value::Object && obj.objectKind() == "Vars") {
+        return getVar(prop);
+    }
     // Entity field access
     if (auto e = entityHandle(obj)) {
         return e->get(prop);
@@ -373,6 +392,10 @@ Value Interpreter::getMember(const Value &obj, const QString &prop) {
 void Interpreter::setMember(const Value &obj, const QString &prop, const Value &v) {
     if (obj.kind() == Value::Object && obj.objectKind() == "Form") {
         if (m_formWriter) m_formWriter(prop, v);
+        return;
+    }
+    if (obj.kind() == Value::Object && obj.objectKind() == "Vars") {
+        setVar(prop, v);
         return;
     }
     if (auto e = entityHandle(obj)) {

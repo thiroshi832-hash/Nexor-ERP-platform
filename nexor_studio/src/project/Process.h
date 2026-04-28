@@ -35,13 +35,21 @@ struct ProcessMeta {
 
 // One step in the process.
 //
-//   type   — "Server"  : executes `code` synchronously, then jumps to next
-//            "Final"   : executes `code` (optional) and terminates
-//   nextId — id of the step to run next; ignored for Final
+//   type   — "Server"    : executes `code` synchronously, then jumps to next
+//            "Choice"    : executes `code`; the value the body Returns
+//                          (a step id, as a String) becomes the next step
+//            "HumanTask" : opens `formId` modally; on accept executes `code`
+//                          then jumps to next; on reject terminates
+//            "Final"     : executes `code` (optional) and terminates
+//   nextId — id of the step to run next (Server / HumanTask).  For Choice it
+//            is the fallback if the body returns Empty.  Ignored for Final.
+//   formId — file name of the form to show for HumanTask steps (relative to
+//            the project's form locations; HumanTask only).
 struct StepSpec {
     QString id;
     QString type    { "Server" };
     QString nextId;
+    QString formId;                            // HumanTask only
     QString code;                              // Nexor source executed for the step
 };
 
