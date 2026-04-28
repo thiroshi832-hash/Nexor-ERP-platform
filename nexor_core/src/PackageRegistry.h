@@ -37,6 +37,7 @@
 #include <QByteArray>
 #include <QDateTime>
 #include <QSqlDatabase>
+#include <functional>
 
 namespace nx {
 
@@ -81,6 +82,13 @@ public:
     void       setSigningKey(const QByteArray &key) { m_signingKey = key; }
     QByteArray signingKey() const                   { return m_signingKey; }
 
+    // Listener fired right after a package is persisted - used by the
+    // CoreEntityStore to register the sheets so HTTP entity endpoints
+    // can serve them immediately.  The listener receives the raw bytes
+    // (the parsed Package is reconstructed by the listener if needed).
+    using PackageListener = std::function<void(const QByteArray &bytes)>;
+    void setPackageListener(PackageListener fn) { m_listener = std::move(fn); }
+
     // Persists `bytes` under <root>/packages/<id>/<version>.nexor and inserts
     // (or updates) the metadata row.  The .nexor is parsed via PackageReader
     // (built into Core via the studio source tree) so we can pull its title /
@@ -119,11 +127,12 @@ private:
                      const QString &id, const QString &version,
                      const QString &actor, const QString &detail);
 
-    QString       m_root;
-    QSqlDatabase  m_db;
-    QString       m_dbName;     // unique connection name
-    QByteArray    m_signingKey;
-    bool          m_open { false };
+    QString          m_root;
+    QSqlDatabase     m_db;
+    QString          m_dbName;     // unique connection name
+    QByteArray       m_signingKey;
+    PackageListener  m_listener;
+    bool             m_open { false };
 };
 
 } // namespace nx

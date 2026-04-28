@@ -18,6 +18,8 @@ SOURCES += \
     src/PackageApi.cpp \
     src/RpcApi.cpp \
     src/ValueJson.cpp \
+    src/EntityApi.cpp \
+    src/CoreEntityStore.cpp \
     \
     ../nexor_studio/src/build/PackageReader.cpp \
     ../nexor_studio/src/build/PackageDiff.cpp \
@@ -42,6 +44,8 @@ HEADERS += \
     src/PackageApi.h \
     src/RpcApi.h \
     src/ValueJson.h \
+    src/EntityApi.h \
+    src/CoreEntityStore.h \
     \
     ../nexor_studio/src/build/Package.h \
     ../nexor_studio/src/build/PackageReader.h \

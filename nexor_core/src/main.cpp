@@ -17,6 +17,10 @@
 #include "PackageRegistry.h"
 #include "PackageApi.h"
 #include "RpcApi.h"
+#include "EntityApi.h"
+#include "CoreEntityStore.h"
+#include "../../nexor_studio/src/build/PackageReader.h"
+#include <QFile>
 
 int main(int argc, char *argv[]) {
     QCoreApplication app(argc, argv);
@@ -61,6 +65,28 @@ int main(int argc, char *argv[]) {
     QString adminToken = parser.value(adminTokenOption);
     if (!signingKey.isEmpty()) registry.setSigningKey(signingKey.toUtf8());
 
+    // Entity store - opens its own SQLite (core_entities.db) and gains a
+    // schema for every Sheet in every published package as it lands.
+    nx::CoreEntityStore entities(dataRoot);
+    if (!entities.open(&err)) {
+        qCritical().noquote() << "NexorCore: entity store open failed —" << err;
+        return 3;
+    }
+    registry.setPackageListener([&entities](const QByteArray &bytes){
+        auto rd = nx::PackageReader::fromBytes(bytes, /*verifyHash*/false);
+        if (rd.status == nx::PackageReader::Status::Ok)
+            entities.registerSheetsFromPackage(rd.package);
+    });
+    // Also walk what's already on disk so a fresh boot picks up sheets
+    // from packages that were stored before this code shipped.
+    for (const auto &row : registry.list()) {
+        QFile f(row.filePath);
+        if (!f.open(QIODevice::ReadOnly)) continue;
+        auto rd = nx::PackageReader::fromBytes(f.readAll(), /*verifyHash*/false);
+        if (rd.status == nx::PackageReader::Status::Ok)
+            entities.registerSheetsFromPackage(rd.package);
+    }
+
     nx::Router router;
     nx::PackageApi api(&router, &registry);
     api.setAdminToken(adminToken);
@@ -69,6 +95,10 @@ int main(int argc, char *argv[]) {
     nx::RpcApi rpc(&router, &registry);
     rpc.setAdminToken(adminToken);
     rpc.registerRoutes();
+
+    nx::EntityApi entityApi(&router, &entities);
+    entityApi.setAdminToken(adminToken);
+    entityApi.registerRoutes();
 
     nx::HttpServer server(&router);
     if (!server.start(port)) {
@@ -85,6 +115,9 @@ int main(int argc, char *argv[]) {
     qInfo().noquote() << "  POST /api/v1/admin/packages/:id/:version/deploy";
     qInfo().noquote() << "  POST /api/v1/admin/packages/:id/:version/rollback";
     qInfo().noquote() << "  POST /api/v1/rpc/:package/:sub                      (ServerOnly subs)";
+    qInfo().noquote() << "  GET  /api/v1/entities/:sheet[/:id]";
+    qInfo().noquote() << "  POST /api/v1/entities/:sheet";
+    qInfo().noquote() << "  PATCH/DELETE /api/v1/entities/:sheet/:id";
     qInfo().noquote() << QString("  signing-key : %1").arg(
         signingKey.isEmpty() ? "<permissive>" : "<set>");
     qInfo().noquote() << QString("  admin-token : %1").arg(

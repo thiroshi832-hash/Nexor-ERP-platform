@@ -192,6 +192,7 @@ bool PackageRegistry::publish(const QByteArray &bytes,
     outRecord.status     = "pending";
     recordAudit("publish", outRecord.id, outRecord.version, actor,
                 QString("hash=%1 size=%2").arg(outRecord.hash).arg(bytes.size()));
+    if (m_listener) m_listener(bytes);
     return true;
 }
 
