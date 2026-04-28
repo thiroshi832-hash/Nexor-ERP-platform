@@ -21,18 +21,22 @@ EditorView::EditorView(QWidget *parent)
     , m_procCombo(nullptr)
     , m_editor(nullptr) {
 
+    // VB6 code-window header — light gray bar with white combo boxes.
     setStyleSheet(R"(
         QComboBox {
-            background:#262932; color:#dce1e7;
-            border:1px solid #353945; border-radius:3px;
-            padding:3px 22px 3px 8px; font-size:12px;
+            background:#ffffff; color:#000000;
+            border:1px solid #808080; border-radius:0;
+            padding:2px 18px 2px 6px;
+            font-family:"MS Sans Serif","Segoe UI"; font-size:11px;
             min-height:18px;
         }
-        QComboBox:hover, QComboBox:focus { border-color:#5b8cff; }
+        QComboBox:focus    { border-color:#0a246a; }
         QComboBox::drop-down { border:none; width:18px; }
         QComboBox QAbstractItemView {
-            background:#1b1d23; color:#dce1e7;
-            border:1px solid #2a3655; selection-background-color:#1e3a5f;
+            background:#ffffff; color:#000000;
+            border:1px solid #808080;
+            selection-background-color:#0a246a;
+            selection-color:#ffffff;
         }
     )");
 
@@ -42,9 +46,9 @@ EditorView::EditorView(QWidget *parent)
 
     // ── Header bar with two dropdowns ────────────────────────────────
     auto *bar = new QWidget(this);
-    bar->setStyleSheet("background:#181a22; border-bottom:1px solid #1e2030;");
+    bar->setStyleSheet("background:#f0f0f0; border-bottom:1px solid #808080;");
     auto *barRow = new QHBoxLayout(bar);
-    barRow->setContentsMargins(8, 6, 8, 6);
+    barRow->setContentsMargins(8, 4, 8, 4);
     barRow->setSpacing(6);
 
     m_objectCombo = new QComboBox(bar);
@@ -54,7 +58,7 @@ EditorView::EditorView(QWidget *parent)
 
     auto *sep = new QFrame(bar);
     sep->setFrameShape(QFrame::VLine);
-    sep->setStyleSheet("color:#2a3655;");
+    sep->setStyleSheet("color:#808080;");
     barRow->addWidget(sep);
 
     m_procCombo = new QComboBox(bar);

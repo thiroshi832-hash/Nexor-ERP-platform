@@ -17,16 +17,16 @@
 
 // =============================================================================
 // FormCanvas::SelHandle — small overlay widget at one of 8 positions around
-// the currently-selected designed widget.  FormCanvas installs an event
-// filter on each handle to drive the resize.
+// the currently-selected designed widget.  Black 7×7 filled squares — the
+// classic VB6 selection-handle look.
 // =============================================================================
 class FormCanvas::SelHandle : public QWidget {
 public:
     enum Dir { TL = 0, T, TR, R, BR, B, BL, L };
 
     SelHandle(Dir d, QWidget *parent) : QWidget(parent), m_dir(d) {
-        setFixedSize(8, 8);
-        setStyleSheet("background:#5b8cff; border:1px solid #ffffff;");
+        setFixedSize(7, 7);
+        setStyleSheet("background:#000000;");
         switch (d) {
             case TL: case BR: setCursor(Qt::SizeFDiagCursor); break;
             case TR: case BL: setCursor(Qt::SizeBDiagCursor); break;
@@ -41,21 +41,52 @@ private:
 };
 
 // =============================================================================
+// FormCanvas::FormBody — the form's client area.  Paints the VB6 dot grid.
+// =============================================================================
+class FormCanvas::FormBody : public QWidget {
+public:
+    FormBody(QWidget *parent)
+        : QWidget(parent), m_bg(0xC0, 0xC0, 0xC0) {}
+
+    void setBg(const QColor &c) {
+        m_bg = c.isValid() ? c : QColor(0xC0, 0xC0, 0xC0);
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QPainter p(this);
+        // Form interior — VB6 default form colour (button face gray).
+        p.fillRect(rect(), m_bg);
+        // 1-px dark border so the form edge reads against the canvas.
+        p.setPen(QColor(0x40, 0x40, 0x40));
+        p.drawRect(rect().adjusted(0, 0, -1, -1));
+        // Dot grid: black points at every 8-pixel intersection.
+        p.setPen(QColor(0x00, 0x00, 0x00));
+        const int g = 8;
+        for (int y = g; y < height() - 1; y += g)
+            for (int x = g; x < width() - 1; x += g)
+                p.drawPoint(x, y);
+    }
+
+private:
+    QColor m_bg;
+};
+
+// =============================================================================
 // FormCanvas
 // =============================================================================
 FormCanvas::FormCanvas(QWidget *parent) : QWidget(parent) {
     setObjectName("formCanvas");
-    setStyleSheet("QWidget#formCanvas { background:#2d2d30; }");
+    // VB6 MDI workspace gray.
+    setStyleSheet("QWidget#formCanvas { background:#808080; }");
     setFocusPolicy(Qt::StrongFocus);
     setAcceptDrops(true);
     setMouseTracking(true);
 
-    // Body: the form's client area where designed widgets live.
-    m_body = new QWidget(this);
+    // Body: the form's client area.  FormBody paints itself (dot grid).
+    m_body = new FormBody(this);
     m_body->setObjectName("formBody");
-    m_body->setAttribute(Qt::WA_StyledBackground);
-    m_body->setStyleSheet(
-        "QWidget#formBody { background:#f5f5f5; border:1px solid #1e2030; }");
     m_body->setMouseTracking(true);
     m_body->setAcceptDrops(true);          // accept palette drops on body
     m_body->installEventFilter(this);
@@ -118,53 +149,56 @@ void FormCanvas::resizeEvent(QResizeEvent *) {
 // ─── Painting (chrome only — widgets paint themselves) ──────────────────
 void FormCanvas::paintEvent(QPaintEvent *) {
     QPainter p(this);
-    p.setRenderHint(QPainter::Antialiasing);
-
-    // Dotted grid
-    p.fillRect(rect(), QColor(0x2d, 0x2d, 0x30));
-    p.setPen(QColor(0x37, 0x37, 0x3a));
-    for (int x = 0; x < width();  x += 24) p.drawLine(x, 0, x, height());
-    for (int y = 0; y < height(); y += 24) p.drawLine(0, y, width(), y);
+    // Solid VB6-style workspace gray.
+    p.fillRect(rect(), QColor(0x80, 0x80, 0x80));
 
     if (m_path.isEmpty()) {
-        p.setPen(QColor(0x80, 0x80, 0x80));
-        QFont f = p.font(); f.setPointSize(13); f.setWeight(QFont::Light);
+        p.setPen(QColor(0xee, 0xee, 0xee));
+        QFont f = p.font(); f.setPointSize(13); f.setWeight(QFont::Normal);
+        f.setFamily("MS Sans Serif");
         p.setFont(f);
         p.drawText(rect(), Qt::AlignCenter,
                    "No form open.\nDouble-click a .frm in the project tree.");
         return;
     }
 
-    // Form chrome: shadow + title bar above body
+    // Form chrome: classic-Windows blue gradient title bar above the body.
     QRect chrome = formChromeRect();
-    p.fillRect(chrome.adjusted(6, 8, 6, 8), QColor(0, 0, 0, 110)); // shadow
-
     QRect titleBar(chrome.left(), chrome.top(), chrome.width(), kTitleBarH);
-    p.fillRect(titleBar, QColor(0x35, 0x39, 0x44));
+    QLinearGradient grad(titleBar.topLeft(), titleBar.topRight());
+    grad.setColorAt(0.0, QColor(0x0A, 0x24, 0x6A));   // deep blue
+    grad.setColorAt(1.0, QColor(0xA6, 0xCA, 0xF0));   // light blue
+    p.fillRect(titleBar, grad);
 
-    QFont tf = p.font();
-    tf.setPointSize(10); tf.setWeight(QFont::DemiBold);
+    QFont tf("MS Sans Serif", 9, QFont::Bold);
     p.setFont(tf);
-    p.setPen(QColor(0xdc, 0xe1, 0xe7));
-    p.drawText(titleBar.adjusted(12, 0, -90, 0),
+    p.setPen(QColor(0xff, 0xff, 0xff));
+    p.drawText(titleBar.adjusted(8, 0, -78, 0),
                Qt::AlignVCenter | Qt::AlignLeft, m_title);
 
-    int cx = titleBar.right() - 12;
-    auto drawBtn = [&](const QString &g) {
-        int w = 22;
-        QRect r(cx - w, titleBar.top(), w, titleBar.height());
+    // Window controls — three classic 22 px boxes (− □ ×)
+    int boxW = 22, gap = 2;
+    int xRight = titleBar.right() - 4;
+    auto drawCtl = [&](const QString &g, const QColor &fill = QColor()) {
+        QRect r(xRight - boxW, titleBar.top() + 4, boxW, kTitleBarH - 8);
+        p.fillRect(r, fill.isValid() ? fill : QColor(0xC0, 0xC0, 0xC0));
+        p.setPen(QColor(0x00, 0x00, 0x00));
+        QFont bf("MS Sans Serif", 9);
+        p.setFont(bf);
         p.drawText(r, Qt::AlignCenter, g);
-        cx -= w;
+        xRight -= (boxW + gap);
     };
-    drawBtn(QStringLiteral("✕"));
-    drawBtn(QStringLiteral("□"));
-    drawBtn(QStringLiteral("–"));
+    drawCtl(QStringLiteral("✕"), QColor(0xC0, 0xC0, 0xC0));   // ×
+    drawCtl(QStringLiteral("□"));                              // □
+    drawCtl(QStringLiteral("–"));                              // –
 
-    // Footer
-    QRect footer(0, height() - 24, width(), 24);
-    p.fillRect(footer, QColor(0x1e, 0x20, 0x26));
-    p.setPen(QColor(0x9a, 0x9a, 0x9a));
-    QFont ff = p.font(); ff.setPointSize(9); ff.setWeight(QFont::Normal);
+    // Footer status — light gray bar with classic black text.
+    QRect footer(0, height() - 22, width(), 22);
+    p.fillRect(footer, QColor(0xF0, 0xF0, 0xF0));
+    p.setPen(QColor(0x80, 0x80, 0x80));
+    p.drawLine(footer.topLeft(), footer.topRight());
+    p.setPen(QColor(0x00, 0x00, 0x00));
+    QFont ff("MS Sans Serif", 8);
     p.setFont(ff);
     QString left  = QString("  %1").arg(m_path);
     QString right = QString("%1 × %2  ·  %3 widgets  ")
@@ -367,22 +401,22 @@ void FormCanvas::setFormGeometryFromPanel(const QRect &g) {
 
 void FormCanvas::setFormForeground(const QColor &c) {
     m_formFg = c;
-    // Apply to body for visual preview (foreground is used by labels etc).
-    QString css;
-    if (m_formBg.isValid())
-        css += QString("background:%1;").arg(m_formBg.name());
-    else
-        css += "background:#f5f5f5;";
-    css += " border:1px solid #1e2030;";
-    if (m_formFg.isValid()) css += QString("color:%1;").arg(m_formFg.name());
-    m_body->setStyleSheet(QString("QWidget#formBody {%1}").arg(css));
+    if (!m_body) return;
+    // Apply via palette so child widgets that don't set their own foreground
+    // pick this up.
+    QPalette p = m_body->palette();
+    p.setColor(QPalette::WindowText, c.isValid() ? c : QColor(Qt::black));
+    p.setColor(QPalette::Text,       c.isValid() ? c : QColor(Qt::black));
+    m_body->setPalette(p);
     update();
     emit modified();
 }
 
 void FormCanvas::setFormBackground(const QColor &c) {
     m_formBg = c;
-    setFormForeground(m_formFg);   // re-apply combined stylesheet
+    if (m_body) m_body->setBg(c);
+    update();
+    emit modified();
 }
 
 void FormCanvas::setForegroundForSelected(const QColor &c) {
@@ -590,8 +624,7 @@ void FormCanvas::clearForm() {
     m_path.clear(); m_id.clear(); m_title.clear(); m_code.clear();
     m_formW = 640; m_formH = 480;
     m_formFg = QColor(); m_formBg = QColor();
-    m_body->setStyleSheet(
-        "QWidget#formBody { background:#f5f5f5; border:1px solid #1e2030; }");
+    if (m_body) m_body->setBg(QColor());        // back to default form gray
     m_formSelected = false;
     layoutBody();
     update();

@@ -3,10 +3,13 @@
 NexorHighlighter::NexorHighlighter(QTextDocument *parent)
     : QSyntaxHighlighter(parent) {
 
+    // VB6 colours: keywords = pure blue, comments = dark green,
+    // strings = no special colour (we use a subtle maroon for readability),
+    // identifiers/numbers = default black.
+
     // Keywords (case-insensitive — VB Script convention)
     QTextCharFormat keywordFmt;
-    keywordFmt.setForeground(QColor(0xc5, 0x86, 0xff));  // soft purple
-    keywordFmt.setFontWeight(QFont::DemiBold);
+    keywordFmt.setForeground(QColor(0x00, 0x00, 0xff));  // pure blue, like VB6
     QStringList keywords = {
         "Sub", "End", "Function", "Dim", "Set", "If", "Then", "Else",
         "ElseIf", "While", "Wend", "Do", "Loop", "Until", "For", "Next",
@@ -21,9 +24,9 @@ NexorHighlighter::NexorHighlighter(QTextDocument *parent)
         m_rules.append(r);
     }
 
-    // Built-ins
+    // Built-ins — navy (slightly distinct from keywords)
     QTextCharFormat builtinFmt;
-    builtinFmt.setForeground(QColor(0x4e, 0xc9, 0xb0));  // teal
+    builtinFmt.setForeground(QColor(0x00, 0x00, 0x80));  // navy
     QStringList builtins = {
         "GetProperty", "SetProperty", "CDbl", "CStr", "CInt", "CBool",
         "Len", "Mid", "Left", "Right", "UCase", "LCase", "Trim",
@@ -37,36 +40,21 @@ NexorHighlighter::NexorHighlighter(QTextDocument *parent)
         m_rules.append(r);
     }
 
-    // Numbers
-    QTextCharFormat numberFmt;
-    numberFmt.setForeground(QColor(0xb5, 0xce, 0xa8));  // green-ish
-    Rule numRule;
-    numRule.pattern = QRegularExpression(R"(\b\d+(?:\.\d+)?\b)");
-    numRule.format  = numberFmt;
-    m_rules.append(numRule);
+    // Numbers — VB6 leaves them at the identifier colour (black).  No rule.
 
-    // Strings — "..."  (no escapes in VB Script; "" inside is an escape)
+    // Strings — "..."  (no escapes in VB Script; "" inside is an escape).
+    // VB6 doesn't colour strings, but maroon is a near-universal convention
+    // and helps quoted text pop on a white background.
     QTextCharFormat stringFmt;
-    stringFmt.setForeground(QColor(0xce, 0x91, 0x78));  // warm orange
+    stringFmt.setForeground(QColor(0x80, 0x00, 0x00));  // maroon
     Rule strRule;
     strRule.pattern = QRegularExpression(R"("(?:[^"]|"")*")");
     strRule.format  = stringFmt;
     m_rules.append(strRule);
 
-    // Sub/Function names — capture identifier after Sub/Function
-    QTextCharFormat funcDeclFmt;
-    funcDeclFmt.setForeground(QColor(0xdc, 0xdc, 0xaa));  // pale yellow
-    funcDeclFmt.setFontWeight(QFont::Bold);
-    Rule fnRule;
-    fnRule.pattern = QRegularExpression(R"(\b(?:Sub|Function)\s+([A-Za-z_]\w*))",
-                                        QRegularExpression::CaseInsensitiveOption);
-    fnRule.format  = funcDeclFmt;
-    m_rules.append(fnRule);
-
-    // Comments — apostrophe to end of line  (handled separately so it overrides
-    // any keyword match inside the comment text)
-    m_commentFormat.setForeground(QColor(0x6a, 0x99, 0x55));  // forest green
-    m_commentFormat.setFontItalic(true);
+    // Comments — apostrophe to end of line.  VB6 colour: dark green, plain
+    // (no italic).
+    m_commentFormat.setForeground(QColor(0x00, 0x80, 0x00));  // dark green
     m_commentExpr = QRegularExpression(R"('[^\n]*)");
 }
 

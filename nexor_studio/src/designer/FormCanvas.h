@@ -29,6 +29,7 @@ class FormCanvas : public QWidget {
     Q_OBJECT
 public:
     class SelHandle;            // nested resize-handle widget, defined in .cpp
+    class FormBody;             // nested form-area widget, defined in .cpp
 
     explicit FormCanvas(QWidget *parent = nullptr);
     ~FormCanvas() override;
@@ -142,7 +143,7 @@ private:
     static constexpr int kPadding   = 30;
 
     // ── Children ─────────────────────────────────────────────────────────
-    QWidget        *m_body;
+    FormBody       *m_body;
     QVector<Item>   m_items;
     QWidget        *m_selected { nullptr };
     QVector<SelHandle*> m_handles;     // size = 8

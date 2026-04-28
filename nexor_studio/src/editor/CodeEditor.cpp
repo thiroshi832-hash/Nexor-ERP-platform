@@ -14,17 +14,19 @@ CodeEditor::CodeEditor(QWidget *parent)
     , m_lineNumberArea(nullptr)
     , m_highlighter(nullptr) {
 
-    QFont mono("Consolas");
+    // VB6 default: Courier New 10pt
+    QFont mono("Courier New");
     mono.setStyleHint(QFont::Monospace);
     mono.setFixedPitch(true);
-    mono.setPointSize(11);
+    mono.setPointSize(10);
     setFont(mono);
 
     setStyleSheet(R"(
         QPlainTextEdit {
-            background:#1e1e1e; color:#dcdcdc;
+            background:#ffffff; color:#000000;
             border:none; padding-left:2px;
-            selection-background-color:#264f78;
+            selection-background-color:#0a246a;
+            selection-color:#ffffff;
         }
     )");
 
@@ -196,7 +198,8 @@ void CodeEditor::paintEvent(QPaintEvent *e) {
     QPlainTextEdit::paintEvent(e);
 
     QPainter painter(viewport());
-    painter.setPen(QColor(0x40, 0x44, 0x52));
+    // VB6 procedure separator — solid black hairline.
+    painter.setPen(QColor(0x00, 0x00, 0x00));
 
     QTextBlock block = firstVisibleBlock();
     while (block.isValid()) {
@@ -215,21 +218,20 @@ void CodeEditor::paintEvent(QPaintEvent *e) {
 }
 
 void CodeEditor::highlightCurrentLine() {
-    QList<QTextEdit::ExtraSelection> sels;
-    if (!isReadOnly()) {
-        QTextEdit::ExtraSelection sel;
-        sel.format.setBackground(QColor(0x2a, 0x2d, 0x2e));
-        sel.format.setProperty(QTextFormat::FullWidthSelection, true);
-        sel.cursor = textCursor();
-        sel.cursor.clearSelection();
-        sels.append(sel);
-    }
-    setExtraSelections(sels);
+    // VB6 has no current-line highlight; leave the selection list empty.
+    setExtraSelections({});
 }
 
 void CodeEditor::lineNumberAreaPaintEvent(QPaintEvent *event) {
     QPainter painter(m_lineNumberArea);
-    painter.fillRect(event->rect(), QColor(0x18, 0x18, 0x18));
+    // VB6 has a thin gray "margin indicator bar" on the left of the code
+    // window for breakpoint dots; we widen it slightly to also show line
+    // numbers.  Background is the system "button face" gray.
+    painter.fillRect(event->rect(), QColor(0xee, 0xee, 0xee));
+    // Right edge separator line
+    painter.setPen(QColor(0xc0, 0xc0, 0xc0));
+    painter.drawLine(m_lineNumberArea->width() - 1, event->rect().top(),
+                     m_lineNumberArea->width() - 1, event->rect().bottom());
 
     QTextBlock block = firstVisibleBlock();
     int blockNumber = block.blockNumber();
@@ -240,8 +242,8 @@ void CodeEditor::lineNumberAreaPaintEvent(QPaintEvent *event) {
         if (block.isVisible() && bottom >= event->rect().top()) {
             QString number = QString::number(blockNumber + 1);
             painter.setPen(blockNumber == textCursor().blockNumber()
-                            ? QColor(0xdc, 0xdc, 0xdc)
-                            : QColor(0x6a, 0x6a, 0x6a));
+                            ? QColor(0x00, 0x00, 0x00)   // current = black
+                            : QColor(0x80, 0x80, 0x80)); // others  = gray
             painter.drawText(0, top,
                              m_lineNumberArea->width() - 6, fontMetrics().height(),
                              Qt::AlignRight, number);
