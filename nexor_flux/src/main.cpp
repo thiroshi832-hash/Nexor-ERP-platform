@@ -1,15 +1,16 @@
 // =============================================================================
-// Nexor Flux — client application entry point.
+// Nexor Flux — desktop end-user runtime entry point.
 // =============================================================================
 #include <QApplication>
 #include "FluxWindow.h"
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
-    QApplication::setApplicationName("NexorFlux");
-    QApplication::setApplicationVersion("0.1.0");
+    QCoreApplication::setApplicationName("NexorFlux");
+    QCoreApplication::setApplicationVersion("0.1.0");
+    QCoreApplication::setOrganizationName("Nexor");
 
-    FluxWindow w;
+    nx::FluxWindow w;
     w.show();
     return app.exec();
 }
