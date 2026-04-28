@@ -28,6 +28,13 @@
 #include "project/Sheet.h"
 #include "project/Process.h"
 #include "runtime/ProcessEngine.h"
+#include "build/PackageBuilder.h"
+#include "build/PackageReader.h"
+
+#include <QInputDialog>
+#include <QSettings>
+#include <QDesktopServices>
+#include <QUrl>
 
 #include <QFileInfo>
 #include <QDir>
@@ -42,9 +49,6 @@
 #include <QAction>
 #include <QFileDialog>
 #include <QMessageBox>
-#include <QSettings>
-#include <QDesktopServices>
-#include <QUrl>
 #include <QDateTime>
 
 MainWindow::MainWindow(QWidget *parent)
@@ -342,7 +346,73 @@ void MainWindow::buildMenus() {
     });
 
     auto *buildMenu = menuBar()->addMenu("&Build");
-    buildMenu->addAction("Build Project")->setEnabled(false);
+    buildMenu->addAction("&Build Package...", this, [this]{
+        if (!m_project) {
+            QMessageBox::information(this, "Build Package",
+                "Open or create a project first.");
+            return;
+        }
+        // Persist any unsaved editor / canvas changes so the package picks
+        // up exactly what the developer sees on screen.
+        if (auto *ed = m_central->codeEditor()) {
+            if (ed->currentKind() == CodeEditor::KindActivity) ed->saveActivity();
+            else if (ed->currentKind() == CodeEditor::KindForm) ed->saveForm();
+        }
+        if (auto *cv = m_central->formCanvas())
+            if (!cv->currentFormPath().isEmpty()) cv->saveForm();
+
+        // Last-built version sticks per-project so the user only types it
+        // once for v0.1.0 → v0.1.1 → … bumps.
+        QSettings s;
+        QString key  = "Build/LastVersion/" + m_project->meta().id;
+        QString prev = s.value(key, "0.1.0").toString();
+        bool ok = false;
+        QString version = QInputDialog::getText(this, "Build Package",
+            "Version (SemVer):", QLineEdit::Normal, prev, &ok).trimmed();
+        if (!ok || version.isEmpty()) return;
+        s.setValue(key, version);
+
+        appendOutput(QString("Building %1 v%2…")
+                        .arg(m_project->meta().id, version), "#5b8cff");
+
+        auto res = nx::PackageBuilder::buildAndWrite(*m_project, version);
+        if (!res.ok) {
+            appendOutput("Build failed: " + res.error, "#ef4444");
+            QMessageBox::warning(this, "Build Package", res.error);
+            return;
+        }
+
+        // Round-trip verification — read the package back and confirm the
+        // hash holds.  Catches anything stray that landed between writer and
+        // reader without the developer having to ship a broken artifact.
+        auto rd = nx::PackageReader::fromFile(res.outputPath);
+        if (rd.status == nx::PackageReader::Status::HashMismatch) {
+            appendOutput("WARN: hash mismatch on round-trip — " + rd.message, "#facc15");
+        } else if (rd.status != nx::PackageReader::Status::Ok) {
+            appendOutput("WARN: package wrote but reader rejected it — " + rd.message,
+                         "#facc15");
+        }
+
+        appendOutput(QString("Wrote %1 (%2 activities, %3 forms, %4 sheets, %5 processes)")
+                        .arg(res.outputPath)
+                        .arg(rd.package.activities.size())
+                        .arg(rd.package.forms.size())
+                        .arg(rd.package.sheets.size())
+                        .arg(rd.package.processes.size()),
+                     "#22c55e");
+        appendOutput("Hash: " + res.meta.hash.left(16) + "…", "#8a95a3");
+        statusBar()->showMessage("Package built — " + res.outputPath, 5000);
+    }, QKeySequence("Ctrl+B"));
+
+    buildMenu->addAction("&Open Output Folder", this, [this]{
+        if (!m_project) return;
+        QString dist = m_project->rootDir() + "/dist";
+        if (!QDir(dist).exists()) {
+            statusBar()->showMessage("No build output yet — run Build Package first.", 3000);
+            return;
+        }
+        QDesktopServices::openUrl(QUrl::fromLocalFile(dist));
+    });
     buildMenu->addAction("Clean Project")->setEnabled(false);
 
     auto *runMenu = menuBar()->addMenu("&Run");

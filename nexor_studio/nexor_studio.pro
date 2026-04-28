@@ -24,6 +24,8 @@ SOURCES += \
     src/runtime/FormRunner.cpp \
     src/runtime/WidgetValue.cpp \
     src/runtime/ProcessEngine.cpp \
+    src/build/PackageBuilder.cpp \
+    src/build/PackageReader.cpp \
     src/language/Lexer.cpp \
     src/language/Parser.cpp \
     src/language/Value.cpp \
@@ -61,6 +63,9 @@ HEADERS += \
     src/runtime/FormRunner.h \
     src/runtime/WidgetValue.h \
     src/runtime/ProcessEngine.h \
+    src/build/Package.h \
+    src/build/PackageBuilder.h \
+    src/build/PackageReader.h \
     src/language/Token.h \
     src/language/Lexer.h \
     src/language/Ast.h \
