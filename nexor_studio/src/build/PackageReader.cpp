@@ -1,5 +1,4 @@
 #include "PackageReader.h"
-#include "PackageBuilder.h"
 
 #include <QFile>
 #include <QXmlStreamReader>

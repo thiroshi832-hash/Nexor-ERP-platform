@@ -1,4 +1,4 @@
-QT       += core gui widgets xml sql
+QT       += core gui widgets xml sql network
 
 TARGET   = NexorStudio
 TEMPLATE = app

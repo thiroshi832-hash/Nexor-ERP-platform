@@ -1,4 +1,4 @@
-QT       += core network
+QT       += core network sql xml
 QT       -= gui
 
 TARGET   = NexorCore
@@ -6,16 +6,21 @@ TEMPLATE = app
 CONFIG  += console c++14
 CONFIG  -= app_bundle
 
-INCLUDEPATH += src
+INCLUDEPATH += src ../nexor_studio/src
 
 SOURCES += \
     src/main.cpp \
-    src/CoreServer.cpp \
-    src/ClientSession.cpp
+    src/Http.cpp \
+    src/PackageRegistry.cpp \
+    src/PackageApi.cpp \
+    ../nexor_studio/src/build/PackageReader.cpp
 
 HEADERS += \
-    src/CoreServer.h \
-    src/ClientSession.h
+    src/Http.h \
+    src/PackageRegistry.h \
+    src/PackageApi.h \
+    ../nexor_studio/src/build/Package.h \
+    ../nexor_studio/src/build/PackageReader.h
 
 DESTDIR     = $$PWD/../bin
 OBJECTS_DIR = $$PWD/build/obj
