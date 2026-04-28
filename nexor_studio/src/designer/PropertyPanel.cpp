@@ -394,6 +394,10 @@ void PropertyPanel::setDescription(const QString &fieldName) {
 
 void PropertyPanel::populateObjectCombo() {
     if (!m_objectCombo) return;
+    // Save / restore m_updating — populateObjectCombo can be called from
+    // inside refreshFromSelection which sets m_updating = true to suppress
+    // signal feedback, and we mustn't accidentally re-enable signals.
+    bool prev = m_updating;
     m_updating = true;
     m_objectCombo->clear();
     if (m_canvas && !m_canvas->currentFormPath().isEmpty()) {
@@ -422,7 +426,7 @@ void PropertyPanel::populateObjectCombo() {
         }
         m_objectCombo->setCurrentIndex(curIdx);
     }
-    m_updating = false;
+    m_updating = prev;
 }
 
 QLabel *PropertyPanel::labelFor(const QString &text) {
@@ -547,6 +551,7 @@ void PropertyPanel::onFormSelected() {
 
 void PropertyPanel::refreshFromSelection() {
     if (!m_canvas) return;
+    populateObjectCombo();          // keep combo in sync with rename / add / delete
     m_updating = true;
 
     if (m_mode == ModeForm) {

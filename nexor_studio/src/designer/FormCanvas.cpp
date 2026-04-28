@@ -91,6 +91,7 @@ FormCanvas::FormCanvas(QWidget *parent) : QWidget(parent) {
     m_body->setAcceptDrops(true);          // accept palette drops on body
     m_body->installEventFilter(this);
     m_body->resize(m_formW, m_formH);
+    m_body->hide();    // no form is loaded yet — body should not show
 
     // 8 selection handles.
     for (int d = 0; d < 8; ++d) {
@@ -263,6 +264,16 @@ void FormCanvas::selectWidget(QWidget *w) {
 }
 
 void FormCanvas::selectForm() {
+    // Don't enter "form selected" state if no form is open — handles would
+    // appear around an invisible body and the property panel would think
+    // it's editing a non-existent form.
+    if (m_path.isEmpty()) {
+        m_selected = nullptr;
+        m_formSelected = false;
+        layoutHandles();
+        emit selectionChanged(nullptr);
+        return;
+    }
     m_selected = nullptr;
     m_formSelected = true;
     layoutHandles();
@@ -635,8 +646,11 @@ void FormCanvas::clearForm() {
     m_path.clear(); m_id.clear(); m_title.clear(); m_code.clear();
     m_formW = 640; m_formH = 480;
     m_formFg = QColor(); m_formBg = QColor();
-    if (m_body) m_body->setBg(QColor());        // back to default form gray
     m_formSelected = false;
+    if (m_body) {
+        m_body->setBg(QColor());      // back to default form gray
+        m_body->hide();               // no form loaded any more
+    }
     layoutBody();
     update();
 }
@@ -731,6 +745,7 @@ bool FormCanvas::loadForm(const QString &filePath) {
         setFormForeground(m_formFg);   // also re-applies bg
 
     if (m_title.isEmpty()) m_title = m_id;
+    if (m_body) m_body->show();         // form is now loaded → show body
     layoutBody();
     update();
     selectForm();                       // start with form selected
