@@ -1,0 +1,32 @@
+/* Nexor brand tweaks on top of Starlight's defaults. */
+
+:root {
+    /* Match the desktop apps' palette - blue (Studio), purple (Core),
+       orange (Command), green (Flux). */
+    --sl-color-accent-low:  #1e3a5f;
+    --sl-color-accent:      #5b8cff;
+    --sl-color-accent-high: #c5d8ff;
+}
+
+:root[data-theme='dark'] {
+    --sl-color-bg:         #0d0e12;
+    --sl-color-bg-nav:     #13151b;
+    --sl-color-bg-sidebar: #13151b;
+    --sl-color-text:       #dce1e7;
+    --sl-color-text-accent:#5b8cff;
+}
+
+/* App-name mentions get a small coloured pill so docs visually link to
+   the four desktop apps in the architecture. */
+.app-pill {
+    display: inline-block;
+    padding: 0.05em 0.5em;
+    border-radius: 0.4em;
+    font-weight: 600;
+    font-size: 0.85em;
+    line-height: 1.4;
+}
+.app-pill.studio  { background:#1e3a5f; color:#c5d8ff; }
+.app-pill.core    { background:#3a1e5f; color:#e0c5ff; }
+.app-pill.command { background:#5f3a1e; color:#ffd9b3; }
+.app-pill.flux    { background:#1e5f3a; color:#b8f5cd; }

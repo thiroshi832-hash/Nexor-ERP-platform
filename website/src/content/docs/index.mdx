@@ -1,0 +1,81 @@
+---
+title: Nexor
+description: ERP platform built on a single VB-Script-flavored language and four desktop apps.
+template: splash
+hero:
+  tagline: |
+    One language. Four apps. One package format. From source code to a
+    running ERP module on a user's desktop in five minutes.
+  actions:
+    - text: Get started
+      link: /getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/your-org/nexor
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## The platform
+
+Nexor is **four desktop apps** that share **one source tree** and speak
+**one signed `.nexor` package format**:
+
+<CardGrid>
+  <Card title="🟦 Nexor Studio" icon="pencil">
+    The IDE — code editor, form designer, sheet editor, BPMN 2.0 process
+    designer, builder. Writes `.nexor` packages to disk.
+  </Card>
+  <Card title="🟪 Nexor Core" icon="setting">
+    The backend HTTP server — package registry, audit log, entity REST
+    CRUD, RPC for `[ServerOnly]` activities, persistent workflow engine.
+    Has its own GUI for environment-variable settings.
+  </Card>
+  <Card title="🟧 Nexor Command" icon="approve-check">
+    The admin console — registers packages with Core, deploys, rolls back,
+    audits.
+  </Card>
+  <Card title="🟩 Nexor Flux" icon="rocket">
+    The end-user runtime — installs packages from Core, runs Activities,
+    Forms, and Processes locally with transparent server-side RPC.
+  </Card>
+</CardGrid>
+
+## The develop → publish → run loop
+
+```
+   Studio ──build──▶ .nexor ──register──▶ Core ──deploy──▶ Core (live) ──fetch──▶ Flux
+                                  │                                    │
+                                  └─────── Command  ──audit log─────── ┘
+```
+
+Studio writes `<project>/dist/<id>-<version>.nexor`. An administrator
+running **Command** picks the file and registers it with Core. Command's
+admin UI then deploys the pending row to live, after which Flux can
+catalog → install → run it.
+
+## Documentation map
+
+<CardGrid>
+  <Card title="Getting started"      icon="rocket">     Build all four apps from source and walk through the publish loop. <a href="/getting-started/">Read →</a></Card>
+  <Card title="Language reference"   icon="open-book">  Every keyword, operator, statement, and built-in function. <a href="/language-reference/">Read →</a></Card>
+  <Card title="Forms"                icon="seti:html">  Designer, palette, event handlers, two-way data binding. <a href="/forms/">Read →</a></Card>
+  <Card title="Sheets & Entities"    icon="seti:db">    Sheet schemas, Entity API, LINQ-style queries. <a href="/sheets/">Read →</a></Card>
+  <Card title="Processes & BPMN"     icon="puzzle">     BPMN 2.0 designer, step types, persistent workflows. <a href="/processes/">Read →</a></Card>
+  <Card title="Publishing"           icon="bars">       `.nexor` format, signing, Studio → Command → Core flow. <a href="/publishing/">Read →</a></Card>
+  <Card title="Server-side"          icon="setting">    `[Activity(RunsOn := ServerOnly)]` + RPC. <a href="/server-side/">Read →</a></Card>
+  <Card title="HTTP API reference"   icon="information"> Every Core endpoint with curl examples. <a href="/api-reference/">Read →</a></Card>
+</CardGrid>
+
+## Sample projects
+
+Three self-contained Nexor projects — open one in Studio with
+**File → Open Project**:
+
+<CardGrid>
+  <Card title="hello-world">      Smallest possible project: one Activity, one Form, one Button. <a href="/samples/hello-world/">Read →</a></Card>
+  <Card title="customer-crud">    Sheet schema + form data binding + LINQ queries. <a href="/samples/customer-crud/">Read →</a></Card>
+  <Card title="order-approval">   Full BPMN process with Choice and HumanTask. <a href="/samples/order-approval/">Read →</a></Card>
+</CardGrid>

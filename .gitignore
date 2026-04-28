@@ -50,3 +50,13 @@ Thumbs.db
 
 # Local user-only project files
 *.local.pro
+
+# Astro / Node (the docs site at website/ has its own .gitignore but
+# keep these patterns here too in case anyone adds Node code elsewhere).
+node_modules/
+website/dist/
+website/.astro/
+
+# Per-project runtime artifacts under sample projects.
+docs/samples/*/dist/
+docs/samples/*/project.ndb

@@ -1,0 +1,21 @@
+{
+  "name": "nexor-docs",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Documentation site for the Nexor platform.",
+  "scripts": {
+    "dev":     "astro dev",
+    "build":   "astro build",
+    "preview": "astro preview",
+    "check":   "astro check"
+  },
+  "dependencies": {
+    "@astrojs/check":     "^0.9.4",
+    "@astrojs/starlight": "0.30.6",
+    "astro":              "4.16.18",
+    "sharp":              "^0.33.5",
+    "typescript":         "^5.7.0",
+    "zod":                "3.25.76"
+  }
+}

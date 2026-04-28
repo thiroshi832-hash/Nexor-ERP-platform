@@ -301,6 +301,9 @@ void MainWindow::buildMenus() {
     fileMenu->addAction("E&xit", this, &QWidget::close, QKeySequence("Ctrl+Q"));
 
     auto *opsMenu = menuBar()->addMenu("&Operations");
+    opsMenu->addAction("&Register Package...", this, &MainWindow::onRegisterPackage,
+                       QKeySequence("Ctrl+R"));
+    opsMenu->addSeparator();
     opsMenu->addAction("&Refresh",  this, &MainWindow::onRefresh,  QKeySequence("F5"));
     opsMenu->addAction("&Deploy",   this, &MainWindow::onDeploy);
     opsMenu->addAction("R&ollback", this, &MainWindow::onRollback);
@@ -350,6 +353,34 @@ void MainWindow::onSettings() {
     log("Connection settings saved.", "#8a95a3");
     m_client->checkHealth();
     onRefresh();
+}
+
+void MainWindow::onRegisterPackage() {
+    // Pick a .nexor file from disk and POST it to Core.  This is Command's
+    // bridge between Studio's local Build output and the central registry -
+    // Studio writes the file, an administrator running Command uploads it.
+    QSettings s;
+    QString lastDir = s.value("Register/LastDir").toString();
+    QString path = QFileDialog::getOpenFileName(this,
+        "Register Nexor Package",
+        lastDir,
+        "Nexor Package (*.nexor);;All files (*.*)");
+    if (path.isEmpty()) return;
+    s.setValue("Register/LastDir", QFileInfo(path).absolutePath());
+
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly)) {
+        log("Cannot read " + path, "#ef4444");
+        return;
+    }
+    QByteArray bytes = f.readAll();
+    f.close();
+    log(QString("→ register %1 (%2 bytes) → %3")
+            .arg(QFileInfo(path).fileName())
+            .arg(bytes.size())
+            .arg(m_client->baseUrl()),
+        "#5b8cff");
+    m_client->registerPackage(bytes, path);
 }
 
 PackageRow MainWindow::currentVersion() const { return m_selectedVersion; }
@@ -635,7 +666,8 @@ void MainWindow::onDownloadFinished(const QString &id, const QString &version,
 void MainWindow::onOperationFinished(const QString &op, bool ok,
                                      const QString &message) {
     log((ok ? "← " : "✗ ") + message, ok ? "#22c55e" : "#ef4444");
-    if (ok && (op == "deploy" || op == "rollback" || op == "delete-pending"))
+    if (ok && (op == "deploy" || op == "rollback" ||
+               op == "delete-pending" || op == "register"))
         onRefresh();
 }
 

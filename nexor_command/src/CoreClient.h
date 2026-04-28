@@ -73,6 +73,12 @@ public:
     QString adminToken() const { return m_token; }
 
     void listPackages(const QString &statusFilter = QString());
+    // Uploads `bytes` (a .nexor file's raw contents) to Core's
+    // /api/v1/packages endpoint.  This is Command's job - Studio never
+    // talks to Core directly; it writes the package to disk and an admin
+    // running Command pushes it through.
+    void registerPackage(const QByteArray &bytes,
+                         const QString &localPath = QString());
     void deploy        (const QString &id, const QString &version);
     void rollback      (const QString &id, const QString &version);
     void deletePending (const QString &id, const QString &version);
