@@ -238,6 +238,9 @@ PropertyPanel::PropertyPanel(QWidget *parent) : QWidget(parent) {
     m_anchorL = makeAnchorBtn("L");
     m_anchorR = makeAnchorBtn("R");
     m_anchorB = makeAnchorBtn("B");
+
+    m_dataSourceEdit = new QLineEdit(this); m_dataSourceEdit->setFrame(false); m_dataSourceEdit->hide();
+    m_bindingEdit    = new QLineEdit(this); m_bindingEdit->setFrame(false);    m_bindingEdit->hide();
     {
         m_anchorRow = new QWidget(this);
         m_anchorRow->setStyleSheet("background:white;");
@@ -268,6 +271,10 @@ PropertyPanel::PropertyPanel(QWidget *parent) : QWidget(parent) {
     m_descriptions["RightClick"]  = "Occurs when the user right-clicks the control.";
     m_descriptions["Load"]        = "Fires once, when the form is first shown.";
     m_descriptions["Unload"]      = "Fires when the form is being closed.";
+    m_descriptions["DataSource"]  = "Returns/sets the Sheet (entity type) that this form edits. "
+                                     "When set, Form.Load(id) and Form.Save() bind through this Sheet.";
+    m_descriptions["Binding"]     = "Returns/sets the entity field this widget reads/writes. "
+                                     "Empty = no binding.";
 
     // Wire field edits → canvas mutators
     connect(m_nameEdit, &QLineEdit::editingFinished, this, &PropertyPanel::onNameEdited);
@@ -287,6 +294,8 @@ PropertyPanel::PropertyPanel(QWidget *parent) : QWidget(parent) {
     connect(m_anchorL, &QToolButton::toggled, this, bumpAnchor);
     connect(m_anchorR, &QToolButton::toggled, this, bumpAnchor);
     connect(m_anchorB, &QToolButton::toggled, this, bumpAnchor);
+    connect(m_dataSourceEdit, &QLineEdit::editingFinished, this, &PropertyPanel::onDataSourceEdited);
+    connect(m_bindingEdit,    &QLineEdit::editingFinished, this, &PropertyPanel::onBindingEdited);
 
     setMode(ModeEmpty);
 }
@@ -394,7 +403,8 @@ void PropertyPanel::detachAllEditorsFromTable() {
     // so our persistent editors survive the layout rebuild.
     QList<QWidget*> editors {
         m_nameEdit, m_textEdit, m_xSpin, m_ySpin, m_wSpin, m_hSpin,
-        m_fgBtn, m_bgBtn, m_visibleRow, m_anchorRow
+        m_fgBtn, m_bgBtn, m_visibleRow, m_anchorRow,
+        m_dataSourceEdit, m_bindingEdit
     };
     for (QWidget *w : editors) {
         if (!w) continue;
@@ -437,6 +447,11 @@ void PropertyPanel::rebuildLayout() {
             hdr("Behavior");
             add("Visible", m_visibleRow);
             add("Anchor",  m_anchorRow);
+            hdr("Data");
+            add("Binding", m_bindingEdit);
+        } else if (m_mode == ModeForm) {
+            hdr("Data");
+            add("DataSource", m_dataSourceEdit);
         }
     } else {
         QVector<QPair<QString, QWidget*>> rows;
@@ -451,7 +466,10 @@ void PropertyPanel::rebuildLayout() {
              << QPair<QString,QWidget*>("Y",          m_ySpin);
         if (m_mode == ModeWidget) {
             rows << QPair<QString,QWidget*>("Anchor",  m_anchorRow);
+            rows << QPair<QString,QWidget*>("Binding", m_bindingEdit);
             rows << QPair<QString,QWidget*>("Visible", m_visibleRow);
+        } else if (m_mode == ModeForm) {
+            rows << QPair<QString,QWidget*>("DataSource", m_dataSourceEdit);
         }
         std::sort(rows.begin(), rows.end(),
                   [](const QPair<QString,QWidget*> &a,
@@ -573,6 +591,7 @@ void PropertyPanel::refreshFromSelection() {
         m_wSpin->setValue(fs.width()); m_hSpin->setValue(fs.height());
         m_fgColor = m_canvas->formForeground(); updateColorBtn(m_fgBtn, m_fgColor);
         m_bgColor = m_canvas->formBackground(); updateColorBtn(m_bgBtn, m_bgColor);
+        m_dataSourceEdit->setText(m_canvas->dataSource());
     } else if (m_mode == ModeWidget) {
         QWidget *w = m_canvas->selectedWidget();
         if (!w) { m_updating = false; return; }
@@ -593,6 +612,7 @@ void PropertyPanel::refreshFromSelection() {
         QVariant visV = WidgetFactory::readProperty(w, "visible");
         m_visibleCheck->setChecked(visV.isValid() ? visV.toBool() : true);
         applyAnchorString(WidgetFactory::readProperty(w, "anchor").toString());
+        m_bindingEdit->setText(m_canvas->bindingForSelected());
     }
 
     m_updating = false;
@@ -676,4 +696,16 @@ void PropertyPanel::applyAnchorString(const QString &s) {
 void PropertyPanel::onAnchorToggled() {
     if (m_updating || !m_canvas || m_mode != ModeWidget) return;
     m_canvas->setAnchorForSelected(anchorString());
+}
+
+void PropertyPanel::onDataSourceEdited() {
+    setDescription("DataSource");
+    if (m_updating || !m_canvas || m_mode != ModeForm) return;
+    m_canvas->setDataSource(m_dataSourceEdit->text().trimmed());
+}
+
+void PropertyPanel::onBindingEdited() {
+    setDescription("Binding");
+    if (m_updating || !m_canvas || m_mode != ModeWidget) return;
+    m_canvas->setBindingForSelected(m_bindingEdit->text().trimmed());
 }

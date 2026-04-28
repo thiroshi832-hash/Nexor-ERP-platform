@@ -234,11 +234,16 @@ Value Interpreter::evalExpr(Expr *e, std::shared_ptr<Environment> env) {
         QString lo = v->name.toLower();
         // 1. Local / global variable wins.
         if (env->has(v->name)) return env->get(v->name);
-        // 2. Registered sheet name (Customer, Order, …) → SheetRef value.
+        // 2. The magic "Form" name (only meaningful when a FormRunner has
+        //    installed bridge callbacks on this interpreter).
+        if (lo == "form" && (m_formHandler || m_formReader)) {
+            return Value::object(std::shared_ptr<void>(), "Form");
+        }
+        // 3. Registered sheet name (Customer, Order, …) → SheetRef value.
         if (m_store.hasSheet(v->name)) return makeSheetRefValue(v->name, &m_store);
-        // 3. No-arg user-defined sub.
+        // 4. No-arg user-defined sub.
         if (m_subs.contains(lo))     return call(v->name, {});
-        // 4. No-arg built-in.
+        // 5. No-arg built-in.
         if (m_builtins.contains(lo)) return m_builtins.value(lo)(*this, {});
         return Value();             // implicitly empty
     }
@@ -333,6 +338,10 @@ Value Interpreter::evalQuery(QueryExpr *q, std::shared_ptr<Environment> env) {
 
 // ─── Member access + sheet/entity methods ───────────────────────────────
 Value Interpreter::getMember(const Value &obj, const QString &prop) {
+    // Form bridge takes priority for kind=="Form" objects.
+    if (obj.kind() == Value::Object && obj.objectKind() == "Form") {
+        return m_formReader ? m_formReader(prop) : Value();
+    }
     // Entity field access
     if (auto e = entityHandle(obj)) {
         return e->get(prop);
@@ -342,6 +351,10 @@ Value Interpreter::getMember(const Value &obj, const QString &prop) {
 }
 
 void Interpreter::setMember(const Value &obj, const QString &prop, const Value &v) {
+    if (obj.kind() == Value::Object && obj.objectKind() == "Form") {
+        if (m_formWriter) m_formWriter(prop, v);
+        return;
+    }
     if (auto e = entityHandle(obj)) {
         e->set(prop, v);
         return;
@@ -351,6 +364,10 @@ void Interpreter::setMember(const Value &obj, const QString &prop, const Value &
 
 Value Interpreter::callMember(const Value &obj, const QString &name,
                               const QVector<Value> &args) {
+    // Form bridge — handle Form.Save / Form.Load / Form.New / etc.
+    if (obj.kind() == Value::Object && obj.objectKind() == "Form") {
+        return m_formHandler ? m_formHandler(name, args) : Value();
+    }
     QString lo = name.toLower();
 
     // ── Sheet methods: New / Find / All / Count / Delete

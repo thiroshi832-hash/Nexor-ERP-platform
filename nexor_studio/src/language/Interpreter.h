@@ -60,6 +60,17 @@ public:
     EntityStore *entityStore() { return &m_store; }
     void         registerSheet(const SheetSchema &schema);
 
+    // Form bridge — FormRunner installs these so user code that says
+    //   Form.Save()        Form.Load(id)        Form.Current.Name
+    // dispatches into the live form's data binding.
+    using FormHandler = std::function<Value(const QString &method,
+                                            const QVector<Value> &args)>;
+    using FormReader  = std::function<Value(const QString &prop)>;
+    using FormWriter  = std::function<void (const QString &prop, const Value &v)>;
+    void setFormHandler(FormHandler h) { m_formHandler = std::move(h); }
+    void setFormReader (FormReader  r) { m_formReader  = std::move(r); }
+    void setFormWriter (FormWriter  w) { m_formWriter  = std::move(w); }
+
     // Resolves a member access:  obj.prop  →  Value
     // Used by the parser-level MemberExpr and by member assignment.
     Value getMember(const Value &obj, const QString &prop);
@@ -97,6 +108,10 @@ private:
     OutputCallback m_errorOut;
     QString        m_lastError;
     QString        m_currentUnit;
+
+    FormHandler    m_formHandler;
+    FormReader     m_formReader;
+    FormWriter     m_formWriter;
 };
 
 } // namespace nx

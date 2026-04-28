@@ -356,7 +356,8 @@ void MainWindow::buildMenus() {
         // Pipe Print + runtime errors back to the OUTPUT pane.
         FormRunner::runForm(path, this,
             [this](const QString &line) { appendOutput(line, "#dce1e7"); },
-            [this](const QString &err)  { appendOutput("ERROR: " + err, "#ef4444"); });
+            [this](const QString &err)  { appendOutput("ERROR: " + err, "#ef4444"); },
+            m_project.get());
     }, QKeySequence(Qt::Key_F5));
 
     runMenu->addAction("Run &Activity (Sub Main)", this, [this]{

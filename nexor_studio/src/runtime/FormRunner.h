@@ -18,6 +18,7 @@
 #include <functional>
 
 class QWidget;
+class Project;
 
 class FormRunner {
 public:
@@ -25,10 +26,14 @@ public:
 
     // Loads filePath, builds a QDialog, shows it.  Returns true on success.
     // out / err are optional sinks for Print and runtime errors.
+    // project may be null (no entity binding); when non-null, the form's
+    // dataSource attribute is honoured and Form.Save / .Load are wired to
+    // the project's SQLite store.
     static bool runForm(const QString &filePath,
-                        QWidget *parent  = nullptr,
-                        OutputFn out     = nullptr,
-                        OutputFn err     = nullptr);
+                        QWidget *parent       = nullptr,
+                        OutputFn out          = nullptr,
+                        OutputFn err          = nullptr,
+                        const Project *project= nullptr);
 };
 
 #endif // NEXOR_STUDIO_FORMRUNNER_H

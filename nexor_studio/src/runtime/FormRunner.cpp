@@ -1,6 +1,9 @@
 #include "FormRunner.h"
 #include "designer/WidgetFactory.h"
 #include "language/NexorRuntime.h"
+#include "language/EntityStore.h"
+#include "runtime/WidgetValue.h"
+#include "project/Project.h"
 
 #include <QDialog>
 #include <QFile>
@@ -16,6 +19,7 @@
 #include <QSlider>
 #include <QFileInfo>
 #include <QTimer>
+#include <QPointer>
 
 namespace {
 
@@ -66,10 +70,11 @@ void hookEvents(QWidget *w,
 // title, formW, formH, code, and the list of widgets to instantiate.
 struct FormSpec {
     QString title;
+    QString dataSource;                  // empty == no entity binding
     int     w { 640 }, h { 480 };
     QString code;
     struct WidgetEntry {
-        QString type, name, text;
+        QString type, name, text, binding;
         int x = 0, y = 0, w = 0, h = 0;
     };
     QVector<WidgetEntry> widgets;
@@ -85,7 +90,9 @@ bool readFormFile(const QString &path, FormSpec &spec) {
         r.readNext();
         if (r.isStartElement()) {
             const auto n = r.name();
-            if (n == "Geometry") {
+            if (n == "Form") {
+                spec.dataSource = r.attributes().value("dataSource").toString();
+            } else if (n == "Geometry") {
                 const auto a = r.attributes();
                 if (a.hasAttribute("width"))  spec.w = a.value("width").toInt();
                 if (a.hasAttribute("height")) spec.h = a.value("height").toInt();
@@ -96,8 +103,9 @@ bool readFormFile(const QString &path, FormSpec &spec) {
             } else if (n == "Widget") {
                 inWidget = true; cur = {};
                 const auto a = r.attributes();
-                cur.type = a.value("type").toString();
-                cur.name = a.value("name").toString();
+                cur.type    = a.value("type").toString();
+                cur.name    = a.value("name").toString();
+                cur.binding = a.value("binding").toString();
                 cur.x    = a.value("x").toInt();
                 cur.y    = a.value("y").toInt();
                 cur.w    = a.value("width").toInt();
@@ -117,10 +125,47 @@ bool readFormFile(const QString &path, FormSpec &spec) {
 
 } // namespace
 
+// FormContext lives for the lifetime of the running form.  It carries the
+// data binding + a pointer to the currently-bound entity so that Form.Save /
+// Form.Load can pull values into / push values out of the right widgets.
+namespace {
+struct FormContext {
+    QString                                 dataSource;
+    QHash<QString, QString>                 bindings;     // widgetName → fieldName  (lowercase keys)
+    QHash<QString, QPointer<QWidget>>       widgets;      // widgetName → widget     (lowercase keys)
+    nx::EntityStore                        *store    { nullptr };
+    std::shared_ptr<nx::Entity>             current;
+
+    QPointer<QWidget> widgetFor(const QString &name) const {
+        return widgets.value(name.toLower());
+    }
+
+    // Pull current entity field values into bound widgets.
+    void pushEntityToWidgets() {
+        if (!current) return;
+        for (auto it = bindings.begin(); it != bindings.end(); ++it) {
+            QPointer<QWidget> w = widgetFor(it.key());
+            if (!w) continue;
+            nx::WidgetValue::write(w.data(), current->get(it.value()));
+        }
+    }
+    // Pull bound widget values back into the entity.
+    void pullWidgetsToEntity() {
+        if (!current) return;
+        for (auto it = bindings.begin(); it != bindings.end(); ++it) {
+            QPointer<QWidget> w = widgetFor(it.key());
+            if (!w) continue;
+            current->set(it.value(), nx::WidgetValue::read(w.data()));
+        }
+    }
+};
+} // namespace
+
 bool FormRunner::runForm(const QString &filePath,
                          QWidget *parent,
                          OutputFn out,
-                         OutputFn err) {
+                         OutputFn err,
+                         const Project *project) {
     FormSpec spec;
     if (!readFormFile(filePath, spec)) return false;
 
@@ -129,19 +174,19 @@ bool FormRunner::runForm(const QString &filePath,
     dlg->setWindowTitle(spec.title);
     dlg->resize(spec.w, spec.h);
 
-    // Compile the form's <Code> block once.
     auto rt = std::make_shared<nx::NexorRuntime>();
     if (out) rt->setOutput(out);
     if (err) rt->setError(err);
 
-    QString unitName = QFileInfo(filePath).fileName();
-    if (!rt->compile(spec.code, unitName) && err) {
-        err(QString("compile error in %1: %2").arg(unitName, rt->lastError()));
-    }
+    // Open the project store + register sheets so the running form can use
+    // entity types in script (Customer.Find(1) etc.).
+    if (project) rt->registerProjectSheets(project);
 
-    // Instantiate widgets, set their objectName to the designed name (so user
-    // code can find them via Qt object lookup if we wire that later), and
-    // hook standard events to interpreter calls.
+    auto ctx       = std::make_shared<FormContext>();
+    ctx->dataSource = spec.dataSource;
+    ctx->store      = rt->interpreter()->entityStore();
+
+    // Instantiate widgets, set objectName, record bindings, hook events.
     for (const auto &we : spec.widgets) {
         if (QWidget *w = WidgetFactory::create(we.type, dlg)) {
             int wW = we.w > 0 ? we.w : WidgetFactory::defaultSize(we.type).width();
@@ -151,11 +196,69 @@ bool FormRunner::runForm(const QString &filePath,
                 WidgetFactory::applyProperty(w, "text", we.text);
             if (!we.name.isEmpty())
                 w->setObjectName(we.name);
+            ctx->widgets.insert(we.name.toLower(), QPointer<QWidget>(w));
+            if (!we.binding.isEmpty())
+                ctx->bindings.insert(we.name.toLower(), we.binding);
             hookEvents(w, we.name, rt);
         }
     }
 
-    // Form_Load fires right after the dialog becomes visible.
+    // Install Form bridge — Form.Save() / Load(id) / New() / Delete() / Current.
+    auto interp = rt->interpreter();
+    interp->setFormHandler([ctx](const QString &method,
+                                 const QVector<nx::Value> &args) -> nx::Value {
+        QString lo = method.toLower();
+        if (ctx->dataSource.isEmpty() || !ctx->store) return nx::Value();
+        nx::EntityTable *table = ctx->store->table(ctx->dataSource);
+        if (!table) return nx::Value();
+
+        if (lo == "new") {
+            ctx->current = table->create();
+            ctx->pushEntityToWidgets();
+            return nx::Value::object(ctx->current, "Entity");
+        }
+        if (lo == "load") {
+            qint64 id = args.isEmpty() ? 0 : args.first().toLong();
+            ctx->current = table->find(id);
+            ctx->pushEntityToWidgets();
+            return ctx->current ? nx::Value::object(ctx->current, "Entity") : nx::Value();
+        }
+        if (lo == "save") {
+            if (!ctx->current) ctx->current = table->create();
+            ctx->pullWidgetsToEntity();
+            return nx::Value::boolean(table->save(ctx->current));
+        }
+        if (lo == "delete") {
+            if (!ctx->current || !ctx->current->isPersisted()) return nx::Value::boolean(false);
+            bool ok = table->remove(ctx->current->id());
+            if (ok) ctx->current.reset();
+            return nx::Value::boolean(ok);
+        }
+        return nx::Value();
+    });
+    interp->setFormReader([ctx](const QString &prop) -> nx::Value {
+        QString lo = prop.toLower();
+        if (lo == "current")
+            return ctx->current ? nx::Value::object(ctx->current, "Entity") : nx::Value();
+        if (lo == "datasource")
+            return nx::Value::text(ctx->dataSource);
+        // Otherwise, treat as a widget name and return the widget's primary value.
+        QPointer<QWidget> w = ctx->widgetFor(prop);
+        if (w) return nx::WidgetValue::read(w.data());
+        return nx::Value();
+    });
+    interp->setFormWriter([ctx](const QString &prop, const nx::Value &v) {
+        // Form.<widgetName> = value  → write to the widget's primary value.
+        QPointer<QWidget> w = ctx->widgetFor(prop);
+        if (w) nx::WidgetValue::write(w.data(), v);
+    });
+
+    QString unitName = QFileInfo(filePath).fileName();
+    if (!rt->compile(spec.code, unitName) && err) {
+        err(QString("compile error in %1: %2").arg(unitName, rt->lastError()));
+    }
+
+    // Form_Unload on dialog destruction; Form_Load right after first paint.
     QObject::connect(dlg, &QDialog::destroyed, [rt]{
         if (rt->hasSub("Form_Unload")) rt->call("Form_Unload");
     });
