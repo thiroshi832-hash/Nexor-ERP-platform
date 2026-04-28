@@ -120,7 +120,7 @@ bool runLoaded(const Process &p,
         QString lower = st.type.toLower();
 
         if (lower == "humantask") {
-#if defined(NEXOR_HAS_WIDGETS)
+#if defined(NEXOR_HAS_FORM_RUNNER)
             QString formPath = resolveFormPath(st.formId, prcDir, project);
             if (formPath.isEmpty()) {
                 if (err) err(QString("HumanTask step '%1' references unknown form '%2'.")
@@ -130,10 +130,10 @@ bool runLoaded(const Process &p,
             bool accepted = FormRunner::runFormModal(formPath, nullptr,
                                                      out, err, project);
 #else
-            // Synchronous engine on a host without QtWidgets - HumanTask
-            // can't open a modal form here; the caller should be using
-            // runHeadless() instead.
-            if (err) err(QString("HumanTask in synchronous engine without QtWidgets - "
+            // Synchronous engine on a host without FormRunner (e.g. Core).
+            // HumanTask can't open a modal form here; the caller should be
+            // using runHeadless() instead.
+            if (err) err(QString("HumanTask in synchronous engine without FormRunner - "
                                   "use runHeadless on this host."));
             return false;
             bool accepted = false;

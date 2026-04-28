@@ -1,10 +1,9 @@
-QT       += core network sql xml
-QT       -= gui
+QT       += core gui widgets network sql xml
+DEFINES  += NEXOR_HAS_WIDGETS
 
 TARGET   = NexorCore
 TEMPLATE = app
-CONFIG  += console c++14
-CONFIG  -= app_bundle
+CONFIG  += c++14
 
 INCLUDEPATH += src ../nexor_studio/src
 
@@ -13,6 +12,8 @@ INCLUDEPATH += src ../nexor_studio/src
 # for PackageReader.
 SOURCES += \
     src/main.cpp \
+    src/MainWindow.cpp \
+    src/SettingsDialog.cpp \
     src/Http.cpp \
     src/PackageRegistry.cpp \
     src/PackageApi.cpp \
@@ -42,6 +43,8 @@ SOURCES += \
     ../nexor_studio/src/project/Project.cpp
 
 HEADERS += \
+    src/MainWindow.h \
+    src/SettingsDialog.h \
     src/Http.h \
     src/PackageRegistry.h \
     src/PackageApi.h \

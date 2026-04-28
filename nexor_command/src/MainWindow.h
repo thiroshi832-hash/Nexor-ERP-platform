@@ -52,6 +52,7 @@ public:
 private slots:
     void onRefresh();
     void onSettings();
+    void onRegisterPackage();
     void onAuditAll();
     void onAuditForSelected();
     void onTreeSelectionChanged();

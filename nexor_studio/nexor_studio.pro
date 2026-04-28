@@ -1,5 +1,5 @@
-QT       += core gui widgets xml sql network
-DEFINES  += NEXOR_HAS_WIDGETS NEXOR_HAS_PROCESS_ENGINE
+QT       += core gui widgets xml sql
+DEFINES  += NEXOR_HAS_WIDGETS NEXOR_HAS_PROCESS_ENGINE NEXOR_HAS_FORM_RUNNER
 
 TARGET   = NexorStudio
 TEMPLATE = app

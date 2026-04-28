@@ -48,6 +48,28 @@ QNetworkReply *CoreClient::post(const QString &path, bool authed,
     return m_nam->post(req, body);
 }
 
+void CoreClient::registerPackage(const QByteArray &bytes, const QString &localPath) {
+    QNetworkRequest req(QUrl(m_baseUrl + "/api/v1/packages"));
+    if (!m_token.isEmpty())
+        req.setRawHeader("Authorization", ("Bearer " + m_token).toUtf8());
+    req.setHeader(QNetworkRequest::ContentTypeHeader,
+                  "application/x-nexor-package");
+    req.setRawHeader("Accept", "application/json");
+    QNetworkReply *r = m_nam->post(req, bytes);
+    QString hint = localPath.isEmpty() ? QString("(in-memory bytes)")
+                                       : QFileInfo(localPath).fileName();
+    connect(r, &QNetworkReply::finished, this, [this, r, hint]{
+        QByteArray body = r->readAll();
+        bool ok = (r->error() == QNetworkReply::NoError);
+        QString summary = ok
+            ? QString("register %1 OK").arg(hint)
+            : QString("register %1 FAILED: %2").arg(hint, r->errorString());
+        if (!body.isEmpty()) summary += "  " + QString::fromUtf8(body);
+        emit operationFinished("register", ok, summary);
+        r->deleteLater();
+    });
+}
+
 QNetworkReply *CoreClient::deleteRq(const QString &path, bool authed) {
     QNetworkRequest req(QUrl(m_baseUrl + path));
     if (authed && !m_token.isEmpty())

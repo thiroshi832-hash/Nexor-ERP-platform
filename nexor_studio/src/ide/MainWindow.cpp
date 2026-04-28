@@ -35,9 +35,6 @@
 #include <QSettings>
 #include <QDesktopServices>
 #include <QUrl>
-#include <QNetworkAccessManager>
-#include <QNetworkRequest>
-#include <QNetworkReply>
 
 #include <QFileInfo>
 #include <QDir>
@@ -425,103 +422,27 @@ void MainWindow::buildMenus() {
         }
         QDesktopServices::openUrl(QUrl::fromLocalFile(dist));
     });
-    buildMenu->addSeparator();
-
-    // Publish — uploads the most recently built .nexor for this project to
-    // a Nexor Core instance.  The URL is per-machine settings so the same
-    // Studio install can target dev / staging / prod by editing it.
-    buildMenu->addAction("&Publish to Core...", this, [this]{
-        if (!m_project) {
-            QMessageBox::information(this, "Publish",
-                "Open or create a project first.");
-            return;
-        }
-        QSettings s;
-        QString verKey = "Build/LastVersion/" + m_project->meta().id;
-        QString version = s.value(verKey).toString();
-        if (version.isEmpty()) {
-            QMessageBox::information(this, "Publish",
-                "Build the project at least once before publishing.");
-            return;
-        }
-        QString fileName = QString("%1-%2.nexor").arg(m_project->meta().id, version);
-        QString filePath = m_project->rootDir() + "/dist/" + fileName;
-        if (!QFileInfo::exists(filePath)) {
-            QMessageBox::warning(this, "Publish",
-                "Package not found:\n" + filePath +
-                "\n\nRun Build Package first.");
-            return;
-        }
-
-        QString defaultUrl = s.value("Publish/CoreUrl", "http://localhost:7421").toString();
-        bool ok = false;
-        QString coreUrl = QInputDialog::getText(this, "Publish to Core",
-            "Nexor Core URL:", QLineEdit::Normal, defaultUrl, &ok).trimmed();
-        if (!ok || coreUrl.isEmpty()) return;
-        s.setValue("Publish/CoreUrl", coreUrl);
-
-        QFile f(filePath);
-        if (!f.open(QIODevice::ReadOnly)) {
-            appendOutput("Publish failed: cannot read " + filePath, "#ef4444");
-            return;
-        }
-        QByteArray bytes = f.readAll();
-        f.close();
-
-        appendOutput(QString("Publishing %1 (%2 bytes) → %3 …")
-                        .arg(fileName).arg(bytes.size()).arg(coreUrl),
-                     "#5b8cff");
-
-        auto *nam = new QNetworkAccessManager(this);
-        QUrl url(coreUrl + "/api/v1/packages");
-        QNetworkRequest req(url);
-        req.setHeader(QNetworkRequest::ContentTypeHeader,
-                      "application/x-nexor-package");
-        req.setRawHeader("Accept", "application/json");
-        QString token = s.value("Publish/AdminToken").toString();
-        if (!token.isEmpty())
-            req.setRawHeader("Authorization", ("Bearer " + token).toUtf8());
-        QNetworkReply *reply = nam->post(req, bytes);
-        connect(reply, &QNetworkReply::finished, this, [this, reply, nam, fileName]{
-            QByteArray body = reply->readAll();
-            int status = reply->attribute(
-                QNetworkRequest::HttpStatusCodeAttribute).toInt();
-            if (reply->error() != QNetworkReply::NoError) {
-                appendOutput(QString("Publish error (%1): %2").arg(status)
-                                .arg(reply->errorString()), "#ef4444");
-                if (!body.isEmpty())
-                    appendOutput("  body: " + QString::fromUtf8(body), "#ef4444");
-            } else {
-                appendOutput(QString("Published %1 → HTTP %2")
-                                .arg(fileName).arg(status), "#22c55e");
-                appendOutput("  " + QString::fromUtf8(body), "#8a95a3");
-            }
-            reply->deleteLater();
-            nam->deleteLater();
-        });
-    }, QKeySequence("Ctrl+Shift+P"));
-
     buildMenu->addAction("Clean Project")->setEnabled(false);
     buildMenu->addSeparator();
 
-    // Publishing settings — Core URL + bearer token + signing key all live
-    // in QSettings; this dialog gives them a one-stop edit surface.
-    buildMenu->addAction("&Publishing Settings...", this, [this]{
+    // Build settings — Studio's only outward concern is signing the package
+    // with an HMAC key the developer team shares; uploading is Command's
+    // job (it owns the registry credentials and the Core URL).
+    buildMenu->addAction("&Build Settings...", this, [this]{
         QSettings s;
         QDialog dlg(this);
-        dlg.setWindowTitle("Publishing Settings");
+        dlg.setWindowTitle("Build Settings");
         auto *form = new QFormLayout(&dlg);
-        auto *urlEdit   = new QLineEdit(s.value("Publish/CoreUrl",
-                            "http://localhost:7421").toString());
-        auto *tokenEdit = new QLineEdit(s.value("Publish/AdminToken").toString());
-        auto *keyEdit   = new QLineEdit(s.value("Publish/SigningKey").toString());
-        urlEdit  ->setPlaceholderText("http://localhost:7421");
-        tokenEdit->setPlaceholderText("(leave blank for permissive Core)");
-        keyEdit  ->setPlaceholderText("(leave blank for unsigned packages)");
-        urlEdit  ->setMinimumWidth(360);
-        form->addRow("Core URL:",       urlEdit);
-        form->addRow("Admin token:",    tokenEdit);
-        form->addRow("Signing key:",    keyEdit);
+        auto *keyEdit = new QLineEdit(s.value("Publish/SigningKey").toString());
+        keyEdit->setPlaceholderText("(leave blank for unsigned packages)");
+        keyEdit->setMinimumWidth(360);
+        form->addRow("Signing key:", keyEdit);
+        auto *hint = new QLabel(
+            "<p style='color:#8a95a3'>Studio writes the package to "
+            "<code>&lt;project&gt;/dist/&lt;id&gt;-&lt;version&gt;.nexor</code>. "
+            "Upload it to a Nexor Core via <b>Nexor Command → Register Package…</b>.</p>");
+        hint->setWordWrap(true);
+        form->addRow(hint);
         auto *bb = new QHBoxLayout;
         auto *cancel = new QPushButton("Cancel");
         auto *save   = new QPushButton("Save");
@@ -531,10 +452,8 @@ void MainWindow::buildMenus() {
         connect(save,   &QPushButton::clicked, &dlg, &QDialog::accept);
         connect(cancel, &QPushButton::clicked, &dlg, &QDialog::reject);
         if (dlg.exec() == QDialog::Accepted) {
-            s.setValue("Publish/CoreUrl",    urlEdit->text().trimmed());
-            s.setValue("Publish/AdminToken", tokenEdit->text());
             s.setValue("Publish/SigningKey", keyEdit->text());
-            appendOutput("Publishing settings saved.", "#8a95a3");
+            appendOutput("Build settings saved.", "#8a95a3");
         }
     });
 
