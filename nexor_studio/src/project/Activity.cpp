@@ -64,7 +64,16 @@ bool Activity::load() {
         else if (name == "Description") m_meta.description = r.readElementText();
         else if (name == "Author")      m_meta.author      = r.readElementText();
         else if (name == "Created")     m_meta.created     = QDateTime::fromString(r.readElementText(), Qt::ISODate);
-        else if (name == "Form")        m_forms << r.attributes().value("file").toString();
+        else if (name == "Form") {
+            // Two on-disk shapes are supported.  New: <Form file="x.frm"/>
+            // Legacy: <Form>x.frm</Form>.  Read the attribute first; if
+            // absent, fall back to the element's text content.  Either way
+            // we end up with the form filename relative to the activity dir.
+            QString file = r.attributes().value("file").toString();
+            if (file.isEmpty())
+                file = r.readElementText().trimmed();
+            if (!file.isEmpty()) m_forms << file;
+        }
         else if (name == "Code")        m_code             = r.readElementText();
     }
     return !r.hasError();
