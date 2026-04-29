@@ -34,6 +34,11 @@ void Lexer::initKeywords() {
         { "or",       TokKind::Or       },
         { "not",      TokKind::Not      },
         { "mod",      TokKind::Mod      },
+        // 'Is' and 'IsNot' are VB-style identity comparisons:
+        //   If x Is Nothing Then ...
+        //   If ord IsNot Nothing Then ...
+        { "is",       TokKind::Is       },
+        { "isnot",    TokKind::IsNot    },
         { "call",     TokKind::Call     },
         { "public",   TokKind::Public   },
         { "private",  TokKind::Private  },
@@ -284,6 +289,8 @@ QString Token::kindName(TokKind k) {
     case TokKind::Or:        return "Or";
     case TokKind::Not:       return "Not";
     case TokKind::Mod:       return "Mod";
+    case TokKind::Is:        return "Is";
+    case TokKind::IsNot:     return "IsNot";
     case TokKind::Call:      return "Call";
     case TokKind::Public:    return "Public";
     case TokKind::Private:   return "Private";

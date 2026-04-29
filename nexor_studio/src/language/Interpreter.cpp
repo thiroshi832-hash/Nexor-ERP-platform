@@ -530,6 +530,24 @@ Value Interpreter::evalBinary(BinaryExpr *b, std::shared_ptr<Environment> env) {
     case TokKind::LtEq:      return Value::boolean(Value::compare(l, r) <= 0);
     case TokKind::Gt:        return Value::boolean(Value::compare(l, r) >  0);
     case TokKind::GtEq:      return Value::boolean(Value::compare(l, r) >= 0);
+    // Identity comparisons.  Nothing is the canonical "no value", so the
+    // common idiom is `x Is Nothing` (true if x is Empty / has no object
+    // handle) and `x IsNot Nothing` (the negation).  For two Object values
+    // we compare the underlying handle pointers - same handle means same
+    // entity / sheet / form.  Everything else falls back to the structural
+    // equality used by '='.
+    case TokKind::Is:
+    case TokKind::IsNot: {
+        bool same;
+        if (l.kind() == Value::Empty || r.kind() == Value::Empty) {
+            same = (l.kind() == Value::Empty && r.kind() == Value::Empty);
+        } else if (l.kind() == Value::Object && r.kind() == Value::Object) {
+            same = (l.objectHandle().get() == r.objectHandle().get());
+        } else {
+            same = (Value::compare(l, r) == 0);
+        }
+        return Value::boolean(b->op == TokKind::Is ? same : !same);
+    }
     default:
         runtimeError(b->line, QString("unsupported binary operator '%1'")
                                 .arg(Token::kindName(b->op)));

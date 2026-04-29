@@ -253,6 +253,27 @@ StmtPtr Parser::parseIf() {
     auto s = std::make_shared<IfStatement>(line);
     ExprPtr cond = parseExpr();
     expect(TokKind::Then, "'Then'");
+
+    // Single-line form: If <cond> Then <stmt> [Else <stmt>]
+    // (one statement after Then, on the same line; no End If).  The
+    // marker is "did NOT see a newline immediately after Then".
+    if (!check(TokKind::Newline) && !check(TokKind::Eof)) {
+        QVector<StmtPtr> body;
+        StmtPtr first = parseStmt();
+        if (first) body.append(first);
+        s->branches.append({cond, body});
+        if (match(TokKind::Else)) {
+            QVector<StmtPtr> elseBody;
+            StmtPtr e = parseStmt();
+            if (e) elseBody.append(e);
+            s->elseBody = elseBody;
+        }
+        consumeNewline();
+        return s;
+    }
+
+    // Multi-line form: If <cond> Then <NL> stmts {ElseIf...} [Else stmts]
+    //                  End If
     consumeNewline();
     QVector<StmtPtr> body = parseStmts({TokKind::End, TokKind::Else, TokKind::ElseIf});
     s->branches.append({cond, body});
@@ -435,7 +456,8 @@ ExprPtr Parser::parseCmp() {
         TokKind k = peek().kind;
         if (k == TokKind::Eq || k == TokKind::NotEq ||
             k == TokKind::Lt || k == TokKind::LtEq ||
-            k == TokKind::Gt || k == TokKind::GtEq) {
+            k == TokKind::Gt || k == TokKind::GtEq ||
+            k == TokKind::Is || k == TokKind::IsNot) {
             int ln = peek().line; advance();
             ExprPtr r = parseConcat();
             l = std::make_shared<BinaryExpr>(ln, k, l, r);
