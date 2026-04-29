@@ -17,6 +17,14 @@ namespace nx {
 namespace {
 
 // Reads a file as UTF-8 text, returns empty string on failure.
+//
+// Line endings are normalised to LF here (CRLF / CR -> LF).  This matters
+// because PackageBuilder's content hash absorbs the bytes we write into
+// the manifest's <Hash>, but PackageReader recomputes the hash over what
+// QXmlStreamReader returned - and the XML 1.0 spec mandates that parsers
+// normalise CRLF to LF in element text.  Without this normalisation a
+// project edited on Windows (CRLF) would write a CRLF-based hash but the
+// reader would see LF, and every signed package would fail hash check.
 QString readTextFile(const QString &path, bool *okOut = nullptr) {
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly)) {
@@ -24,7 +32,11 @@ QString readTextFile(const QString &path, bool *okOut = nullptr) {
         return {};
     }
     if (okOut) *okOut = true;
-    return QString::fromUtf8(f.readAll());
+    QString text = QString::fromUtf8(f.readAll());
+    // Match XML 1.0 line-end normalisation: CRLF -> LF, lone CR -> LF.
+    text.replace("\r\n", "\n");
+    text.replace('\r',  '\n');
+    return text;
 }
 
 // Walk the activity dir for any .frm files referenced by the activity.
