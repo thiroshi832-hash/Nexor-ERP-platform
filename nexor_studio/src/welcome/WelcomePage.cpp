@@ -152,13 +152,6 @@ QToolButton *makeFooterLink(const QString &iconText, const QString &label,
     return b;
 }
 
-QFrame *vline() {
-    auto *f = new QFrame;
-    f->setFrameShape(QFrame::VLine);
-    f->setStyleSheet("color:#1e2030;");
-    return f;
-}
-
 } // namespace
 
 

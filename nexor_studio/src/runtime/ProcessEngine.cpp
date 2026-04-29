@@ -39,12 +39,15 @@ QString buildModuleSource(const Process &p) {
     return out;
 }
 
+#if defined(NEXOR_HAS_FORM_RUNNER)
 // Resolve the form referenced by a HumanTask step.  Searches:
 //   1. Absolute / project-rooted path as given
 //   2. The same directory as the .prc file (processes/<id>/)
 //   3. Each activity directory in the project (where forms live)
 //
-// Returns an empty string on failure.
+// Returns an empty string on failure.  Only compiled into hosts that
+// actually open modal forms - on Core (headless engine) the synchronous
+// HumanTask path is unreachable, so we don't drag the helper in.
 QString resolveFormPath(const QString &formId,
                         const QString &prcDir,
                         const Project *project) {
@@ -78,6 +81,7 @@ QString resolveFormPath(const QString &formId,
     }
     return QString();
 }
+#endif // NEXOR_HAS_FORM_RUNNER
 
 bool runLoaded(const Process &p,
                ProcessEngine::OutputFn out,
@@ -110,7 +114,9 @@ bool runLoaded(const Process &p,
     nx::Interpreter::VarStore vars;
     rt.interpreter()->setVarStore(&vars);
 
+#if defined(NEXOR_HAS_FORM_RUNNER)
     QString prcDir = QFileInfo(p.filePath()).absolutePath();
+#endif
 
     // Walk Start → next → … until Final, dangling, or rejected HumanTask.
     int safety = 1024;     // cycle guard
