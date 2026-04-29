@@ -598,6 +598,7 @@ void Interpreter::installBuiltins() {
         QString msg = argText(a, 0);
 #if defined(NEXOR_HAS_WIDGETS)
         QMessageBox::information(nullptr, "Nexor", msg);
+        Q_UNUSED(ip);
 #else
         if (ip.m_output) ip.m_output("MsgBox: " + msg);
 #endif
@@ -652,7 +653,13 @@ void Interpreter::installBuiltins() {
         return Value::integer(qint64(std::floor(argDbl(a,0))));
     });
     registerBuiltin("Round", [](Interpreter&, const QVector<Value> &a){
-        return Value::real(std::round(argDbl(a,0)));
+        // Round(x)        -> nearest integer-valued double
+        // Round(x, n)     -> nearest value with n decimal places
+        double v = argDbl(a, 0);
+        int    n = a.size() >= 2 ? int(a[1].toLong()) : 0;
+        if (n <= 0) return Value::real(std::round(v));
+        double factor = std::pow(10.0, n);
+        return Value::real(std::round(v * factor) / factor);
     });
 
     // Date/Time

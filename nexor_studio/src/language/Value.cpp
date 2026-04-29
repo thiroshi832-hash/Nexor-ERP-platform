@@ -1,5 +1,6 @@
 #include "Value.h"
 #include <cmath>
+#include <stdexcept>
 
 namespace nx {
 
@@ -41,6 +42,8 @@ qint64 Value::toLong() const {
     case Long:   return m_i;
     case Double: return qint64(m_d);
     case String: return m_s.toLongLong();
+    case Object: return 0;                   // objects don't coerce to numbers
+    case List:   return m_list.size();       // length, like JavaScript / VBA
     }
     return 0;
 }
@@ -52,6 +55,8 @@ double Value::toDouble() const {
     case Long:   return double(m_i);
     case Double: return m_d;
     case String: return m_s.toDouble();
+    case Object: return 0;                   // see toLong above
+    case List:   return double(m_list.size());
     }
     return 0;
 }
@@ -109,12 +114,12 @@ Value Value::mul(const Value &a, const Value &b) {
 }
 Value Value::div(const Value &a, const Value &b) {
     double y = b.toDouble();
-    if (y == 0) return real(qInf());
+    if (y == 0) throw std::runtime_error("division by zero");
     return real(a.toDouble() / y);
 }
 Value Value::mod(const Value &a, const Value &b) {
     qint64 y = b.toLong();
-    if (y == 0) return integer(0);
+    if (y == 0) throw std::runtime_error("modulo by zero");
     return integer(a.toLong() % y);
 }
 Value Value::concat(const Value &a, const Value &b) {
