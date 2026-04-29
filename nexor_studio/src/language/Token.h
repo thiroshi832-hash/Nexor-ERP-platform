@@ -24,6 +24,7 @@ enum class TokKind {
     For, To, Step, Next,
     Return, Exit, Print,
     And, Or, Not, Mod,
+    Is, IsNot,                          // identity comparison: x Is Nothing
     Call, Public, Private,
     From, Where, OrderBy, Select, Take, Ascending, Descending,
     // ── Operators / punctuation
