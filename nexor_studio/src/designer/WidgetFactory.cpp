@@ -15,6 +15,7 @@
 #include <QSlider>
 #include <QDateTimeEdit>
 #include <QSpinBox>
+#include <QDoubleSpinBox>
 #include <QDateTime>
 #include <QColor>
 
@@ -32,51 +33,91 @@ void applyColors(QWidget *w) {
 } // namespace
 
 QWidget *WidgetFactory::create(const QString &type, QWidget *parent) {
-    if (type == "Button")          return new QPushButton(QStringLiteral("Button"), parent);
-    if (type == "Label")           return new QLabel(QStringLiteral("Label"), parent);
-    if (type == "TextBox")         return new QLineEdit(parent);
-    if (type == "TextArea")        return new QPlainTextEdit(parent);
-    if (type == "CheckBox")        return new QCheckBox(QStringLiteral("CheckBox"), parent);
-    if (type == "RadioButton")     return new QRadioButton(QStringLiteral("RadioButton"), parent);
-    if (type == "ComboBox")        { auto *c = new QComboBox(parent);
-                                     c->addItems({"Item 1", "Item 2", "Item 3"});
-                                     return c; }
-    if (type == "ListBox")         { auto *l = new QListWidget(parent);
-                                     l->addItems({"Item 1", "Item 2", "Item 3"});
-                                     return l; }
-    if (type == "GroupBox")        return new QGroupBox(QStringLiteral("GroupBox"), parent);
-    if (type == "Panel")           { auto *f = new QFrame(parent);
-                                     f->setFrameShape(QFrame::Box);
-                                     f->setFrameShadow(QFrame::Sunken);
-                                     return f; }
-    if (type == "TabControl")      { auto *t = new QTabWidget(parent);
-                                     t->addTab(new QWidget, "Tab 1");
-                                     t->addTab(new QWidget, "Tab 2");
-                                     return t; }
-    if (type == "PictureBox")      { auto *l = new QLabel("[Picture]", parent);
-                                     l->setFrameShape(QFrame::Box);
-                                     l->setAlignment(Qt::AlignCenter);
-                                     return l; }
-    if (type == "ProgressBar")     { auto *p = new QProgressBar(parent);
-                                     p->setRange(0, 100); p->setValue(50);
-                                     return p; }
-    if (type == "Separator")       { auto *f = new QFrame(parent);
-                                     f->setFrameShape(QFrame::HLine);
-                                     f->setFrameShadow(QFrame::Sunken);
-                                     return f; }
-    if (type == "Slider")          { auto *s = new QSlider(Qt::Horizontal, parent);
-                                     s->setRange(0, 100); s->setValue(50);
-                                     return s; }
-    if (type == "DateTimePicker")  return new QDateTimeEdit(QDateTime::currentDateTime(), parent);
-    if (type == "NumericUpDown")   { auto *s = new QSpinBox(parent);
-                                     s->setRange(0, 100); return s; }
+    // Both naming conventions are accepted on read:
+    //   - Friendly names ("Button", "Label", "TextBox", ...) - what the
+    //     palette ships and what new files written by FormCanvas use.
+    //   - Qt class names  ("QPushButton", "QLabel", "QLineEdit", ...) -
+    //     what the docs and a few hand-edited / external-tool .frm files
+    //     use.  Aliasing lets both load without surgery.
+    if (type == "Button"     || type == "QPushButton")
+        return new QPushButton(QStringLiteral("Button"), parent);
+    if (type == "Label"      || type == "QLabel")
+        return new QLabel(QStringLiteral("Label"), parent);
+    if (type == "TextBox"    || type == "QLineEdit")
+        return new QLineEdit(parent);
+    if (type == "TextArea"   || type == "QPlainTextEdit" || type == "QTextEdit")
+        return new QPlainTextEdit(parent);
+    if (type == "CheckBox"   || type == "QCheckBox")
+        return new QCheckBox(QStringLiteral("CheckBox"), parent);
+    if (type == "RadioButton"|| type == "QRadioButton")
+        return new QRadioButton(QStringLiteral("RadioButton"), parent);
+    if (type == "ComboBox"   || type == "QComboBox") {
+        auto *c = new QComboBox(parent);
+        c->addItems({"Item 1", "Item 2", "Item 3"});
+        return c;
+    }
+    if (type == "ListBox"    || type == "QListWidget") {
+        auto *l = new QListWidget(parent);
+        l->addItems({"Item 1", "Item 2", "Item 3"});
+        return l;
+    }
+    if (type == "GroupBox"   || type == "QGroupBox")
+        return new QGroupBox(QStringLiteral("GroupBox"), parent);
+    if (type == "Panel"      || type == "QFrame") {
+        auto *f = new QFrame(parent);
+        f->setFrameShape(QFrame::Box);
+        f->setFrameShadow(QFrame::Sunken);
+        return f;
+    }
+    if (type == "TabControl" || type == "QTabWidget") {
+        auto *t = new QTabWidget(parent);
+        t->addTab(new QWidget, "Tab 1");
+        t->addTab(new QWidget, "Tab 2");
+        return t;
+    }
+    if (type == "PictureBox") {
+        auto *l = new QLabel("[Picture]", parent);
+        l->setFrameShape(QFrame::Box);
+        l->setAlignment(Qt::AlignCenter);
+        return l;
+    }
+    if (type == "ProgressBar"|| type == "QProgressBar") {
+        auto *p = new QProgressBar(parent);
+        p->setRange(0, 100); p->setValue(50);
+        return p;
+    }
+    if (type == "Separator") {
+        auto *f = new QFrame(parent);
+        f->setFrameShape(QFrame::HLine);
+        f->setFrameShadow(QFrame::Sunken);
+        return f;
+    }
+    if (type == "Slider"     || type == "QSlider") {
+        auto *s = new QSlider(Qt::Horizontal, parent);
+        s->setRange(0, 100); s->setValue(50);
+        return s;
+    }
+    if (type == "DateTimePicker" || type == "QDateTimeEdit")
+        return new QDateTimeEdit(QDateTime::currentDateTime(), parent);
+    if (type == "NumericUpDown"  || type == "QSpinBox") {
+        auto *s = new QSpinBox(parent);
+        s->setRange(0, 100); return s;
+    }
+    if (type == "QDoubleSpinBox") {
+        auto *s = new QDoubleSpinBox(parent);
+        s->setRange(0, 1e9); s->setDecimals(2);
+        return s;
+    }
     return nullptr;
 }
 
 bool WidgetFactory::hasTextProperty(const QString &type) {
     static const QStringList yes = {
-        "Button", "Label", "TextBox", "TextArea",
-        "CheckBox", "RadioButton", "GroupBox", "PictureBox"
+        "Button",      "Label",      "TextBox",     "TextArea",
+        "CheckBox",    "RadioButton","GroupBox",    "PictureBox",
+        // Qt-class aliases:
+        "QPushButton", "QLabel",     "QLineEdit",   "QPlainTextEdit",
+        "QTextEdit",   "QCheckBox",  "QRadioButton","QGroupBox"
     };
     return yes.contains(type);
 }
