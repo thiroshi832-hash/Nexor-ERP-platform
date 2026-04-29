@@ -78,6 +78,15 @@ static const Case cases[] = {
     { "cdbl",              "Sub Test()\n  Print CDbl(\"3.14\")\nEnd Sub",               "3.14" },
     { "cbool",             "Sub Test()\n  Print CBool(\"true\")\nEnd Sub",              "True" },
 
+    // ── No-paren statement-form sub call (VBScript style) ─────────────
+    // We can't see MsgBox dialogs from a console test, but we can prove
+    // the parser routes the args through to a builtin: define a Sub that
+    // captures via Print, then call it both ways.
+    { "noparen-call-one",  "Sub Say(s)\n  Print s\nEnd Sub\nSub Test()\n  Say \"hi\"\nEnd Sub", "hi" },
+    { "noparen-call-many", "Sub Say(a, b)\n  Print a & \"-\" & b\nEnd Sub\nSub Test()\n  Say \"x\", \"y\"\nEnd Sub", "x-y" },
+    { "noparen-call-ident","Sub Say(s)\n  Print s\nEnd Sub\nSub Test()\n  Dim m = \"hello\"\n  Say m\nEnd Sub", "hello" },
+    { "paren-call-still-works","Sub Say(s)\n  Print s\nEnd Sub\nSub Test()\n  Say(\"hi\")\nEnd Sub", "hi" },
+
     // ── Vars (process bag) — should silently no-op on a fresh interp ──
     { "vars-no-store",     "Sub Test()\n  Vars.X = 5\n  Print Vars.X Is Nothing\nEnd Sub", "True" },
 

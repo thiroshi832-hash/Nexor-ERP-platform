@@ -229,6 +229,28 @@ StmtPtr Parser::parseAssignOrExpr() {
         consumeNewline();
         return std::make_shared<AssignStatement>(name.line, name.lexeme, v);
     }
+    // Statement-form sub call without parens (VBScript style):
+    //     MsgBox "hello"
+    //     MsgBox "hello", "Title"
+    // Trigger only on tokens that unambiguously start an argument list
+    // (literals or a bare identifier).  Operators like '-' or '(' are
+    // left to ordinary expression parsing so arithmetic still works.
+    if (check(TokKind::Ident)) {
+        TokKind n = peek(1).kind;
+        bool argStart =
+            n == TokKind::String  || n == TokKind::Integer || n == TokKind::Double ||
+            n == TokKind::True    || n == TokKind::False   || n == TokKind::Nothing ||
+            n == TokKind::Ident;
+        if (argStart) {
+            Token name = advance();
+            QVector<ExprPtr> args;
+            args.append(parseExpr());
+            while (match(TokKind::Comma)) args.append(parseExpr());
+            consumeNewline();
+            auto call = std::make_shared<CallExpr>(name.line, name.lexeme, args);
+            return std::make_shared<ExprStatement>(name.line, call);
+        }
+    }
     int line = peek().line;
     // Parse a primary-then-postfix expression; if it ends with a member
     // access AND is followed by '=', it's a member-assignment statement.
