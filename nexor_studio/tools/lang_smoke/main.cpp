@@ -10,6 +10,7 @@
 #include <QTextStream>
 #include <QStringList>
 #include "language/NexorRuntime.h"
+#include "language/EntityStore.h"
 
 struct Case {
     const char *name;
@@ -148,6 +149,38 @@ int main(int argc, char *argv[]) {
             out << QString("        got  : %1\n").arg(got);
         }
     }
+    // ── EntityStore error-sink coverage ────────────────────────────────
+    // Save against an unopened store must route a user-visible message to
+    // the registered sink (and still return false), instead of failing
+    // silently via qWarning.  Mirrors the no-project-loaded path that
+    // Studio hits when an .aba is opened without its .nxproj.
+    {
+        ++total;
+        nx::EntityStore store;
+        QString captured;
+        store.setErrorSink([&captured](const QString &m){ captured = m; });
+
+        nx::SheetSchema schema;
+        schema.sheetId = "Customer";
+        nx::SheetSchemaField idF;   idF.name = "Id";   idF.type = "Long";   idF.isKey = true;
+        nx::SheetSchemaField nameF; nameF.name = "Name"; nameF.type = "String";
+        schema.fields << idF << nameF;
+        store.registerSheet(schema);
+
+        auto *t = store.table("Customer");
+        bool saveOk = t && t->save(t->create());
+        bool ok = !saveOk
+                  && captured.contains("EntityStore", Qt::CaseInsensitive)
+                  && captured.contains("Customer");
+        if (!ok) {
+            ++failed;
+            out << "  FAIL  entitystore-save-unopened\n";
+            out << QString("        want : Save==false, sink mentions EntityStore + Customer\n");
+            out << QString("        got  : saveOk=%1, sink=%2\n")
+                    .arg(saveOk ? "true" : "false", captured);
+        }
+    }
+
     out << QString("\n%1 / %2 cases passed (%3 failed)\n")
             .arg(total - failed).arg(total).arg(failed);
     return failed;

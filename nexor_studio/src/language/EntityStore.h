@@ -26,9 +26,12 @@
 #include <QVector>
 #include <QHash>
 #include <QSqlDatabase>
+#include <functional>
 #include <memory>
 
 namespace nx {
+
+class EntityStore;
 
 struct SheetSchemaField {
     QString name;
@@ -74,7 +77,7 @@ private:
 class EntityTable {
 public:
     EntityTable() = default;
-    EntityTable(QSqlDatabase db, SheetSchema schema);
+    EntityTable(QSqlDatabase db, SheetSchema schema, EntityStore *owner = nullptr);
 
     const SheetSchema& schema() const { return m_schema; }
 
@@ -98,12 +101,23 @@ private:
 
     QSqlDatabase   m_db;
     SheetSchema    m_schema;
+    EntityStore   *m_owner { nullptr };
 };
 
 class EntityStore {
 public:
+    using ErrorSink = std::function<void(const QString &)>;
+
     EntityStore();
     ~EntityStore();
+
+    // Register a callback that will receive user-visible diagnostic messages
+    // (open failures, INSERT/UPDATE failures, schema migration errors).
+    // Studio wires this to the runtime error pane so silent SQL failures
+    // become red lines in the output dock instead of disappearing into
+    // qWarning/stderr.  Callable on EntityTable too via reportError().
+    void setErrorSink(ErrorSink cb) { m_onError = std::move(cb); }
+    void reportError(const QString &msg) const;
 
     // Connects (or creates) the SQLite file at filePath.  Subsequent
     // registerSheet calls run schema migrations against this database.
@@ -129,6 +143,7 @@ private:
     QString                                      m_connectionName;
     QSqlDatabase                                 m_db;
     QHash<QString, std::shared_ptr<EntityTable>> m_tables;   // keys lowercased
+    ErrorSink                                    m_onError;
 };
 
 // SheetRef — runtime handle the interpreter exposes via the sheet name.
