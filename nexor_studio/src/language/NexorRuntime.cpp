@@ -4,6 +4,7 @@
 #include "project/Project.h"
 #include "project/Sheet.h"
 #include "project/Process.h"
+#include <QDebug>
 #if defined(NEXOR_HAS_PROCESS_ENGINE)
 #  include "runtime/ProcessEngine.h"
 #endif
@@ -41,14 +42,30 @@ bool NexorRuntime::hasSub(const QString &name) const {
 }
 
 void NexorRuntime::registerProjectSheets(const Project *project) {
-    if (!project) return;
-    // Open the project's persistent store at <project_root>/project.ndb
-    QString root = project->rootDir();
-    if (!root.isEmpty()) {
-        QString dbPath = root + "/project.ndb";
-        if (!m_interp->entityStore()->isOpen())
-            m_interp->entityStore()->open(dbPath);
+    // Forward EntityStore diagnostics into the interpreter's error pane so
+    // SQL failures (open, INSERT/UPDATE, schema migrations) surface as red
+    // lines in the Studio output dock instead of being lost to qWarning.
+    Interpreter *interp = m_interp.get();
+    m_interp->entityStore()->setErrorSink(
+        [interp](const QString &msg) {
+            if (auto cb = interp->errorOut()) cb(msg);
+            else                              qWarning().noquote() << msg;
+        });
+
+    // No project loaded (e.g. user opened a bare .aba via File → Open File):
+    // surface a diagnostic so the user knows why .Save / .Count don't persist.
+    if (!project || project->rootDir().isEmpty()) {
+        m_interp->entityStore()->reportError(
+            "No project root — entity persistence disabled. "
+            "Open the project (.nxproj) so sheets can persist to project.ndb.");
+        return;
     }
+
+    // Open the project's persistent store at <project_root>/project.ndb.
+    // open() routes its own failure message through the sink.
+    QString dbPath = project->rootDir() + "/project.ndb";
+    if (!m_interp->entityStore()->isOpen())
+        m_interp->entityStore()->open(dbPath);
     for (const auto &sht : project->sheets()) {
         nx::SheetSchema s;
         s.sheetId = sht->meta().id;
@@ -65,7 +82,6 @@ void NexorRuntime::registerProjectSheets(const Project *project) {
     }
 
     // Each process becomes a callable handle:  OrderApproval.Start()
-    Interpreter *interp = m_interp.get();
     for (const auto &prc : project->processActivities()) {
         QString prcPath = prc->filePath();
         // Capture by value so the runner remains valid for the lifetime

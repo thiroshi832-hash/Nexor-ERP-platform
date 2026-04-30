@@ -44,8 +44,12 @@ QStringList Entity::fieldNames() const {
 }
 
 // ─── EntityTable ────────────────────────────────────────────────────────
-EntityTable::EntityTable(QSqlDatabase db, SheetSchema schema)
-    : m_db(std::move(db)), m_schema(std::move(schema)) {}
+EntityTable::EntityTable(QSqlDatabase db, SheetSchema schema, EntityStore *owner)
+    : m_db(std::move(db)), m_schema(std::move(schema)), m_owner(owner) {}
+
+static void reportVia(EntityStore *owner, const QString &msg) {
+    if (owner) owner->reportError(msg);
+}
 
 QString EntityTable::tableName() const { return m_schema.sheetId; }
 
@@ -95,7 +99,10 @@ bool EntityTable::ensureSchema() {
     QString sqlCreate = QString("CREATE TABLE IF NOT EXISTS \"%1\" (%2)")
                           .arg(tableName(), colDefs.join(", "));
     if (!q.exec(sqlCreate)) {
-        qWarning() << "ensureSchema CREATE failed:" << q.lastError().text();
+        QString err = QString("EntityStore: CREATE TABLE \"%1\" failed: %2")
+                          .arg(tableName(), q.lastError().text());
+        qWarning() << err;
+        reportVia(m_owner, err);
         return false;
     }
 
@@ -108,8 +115,12 @@ bool EntityTable::ensureSchema() {
         if (!existingLo.contains(f.name.toLower())) {
             QString sqlAlter = QString("ALTER TABLE \"%1\" ADD COLUMN \"%2\" %3")
                                  .arg(tableName(), f.name, sqlType(f.type));
-            if (!q.exec(sqlAlter))
-                qWarning() << "ensureSchema ALTER failed:" << q.lastError().text();
+            if (!q.exec(sqlAlter)) {
+                QString err = QString("EntityStore: ALTER TABLE \"%1\" ADD COLUMN \"%2\" failed: %3")
+                                  .arg(tableName(), f.name, q.lastError().text());
+                qWarning() << err;
+                reportVia(m_owner, err);
+            }
         }
     }
     return true;
@@ -142,7 +153,14 @@ void EntityTable::bindFromEntity(QSqlQuery &q,
 }
 
 bool EntityTable::save(std::shared_ptr<Entity> e) {
-    if (!e || !m_db.isOpen()) return false;
+    if (!e) return false;
+    if (!m_db.isOpen()) {
+        reportVia(m_owner,
+            QString("EntityStore: cannot save \"%1\" — store is not open "
+                    "(no project root, or open() failed earlier).")
+                .arg(tableName()));
+        return false;
+    }
 
     QStringList cols, placeholders, sets;
     for (const auto &f : m_schema.fields) {
@@ -159,7 +177,10 @@ bool EntityTable::save(std::shared_ptr<Entity> e) {
         q.prepare(sql);
         bindFromEntity(q, e);
         if (!q.exec()) {
-            qWarning() << "save INSERT failed:" << q.lastError().text() << sql;
+            QString err = QString("EntityStore: INSERT into \"%1\" failed: %2")
+                              .arg(tableName(), q.lastError().text());
+            qWarning() << err << sql;
+            reportVia(m_owner, err);
             return false;
         }
         e->setId(q.lastInsertId().toLongLong());
@@ -172,7 +193,10 @@ bool EntityTable::save(std::shared_ptr<Entity> e) {
         bindFromEntity(q, e);
         q.bindValue(":__id", QVariant(e->id()));
         if (!q.exec()) {
-            qWarning() << "save UPDATE failed:" << q.lastError().text() << sql;
+            QString err = QString("EntityStore: UPDATE \"%1\" failed: %2")
+                              .arg(tableName(), q.lastError().text());
+            qWarning() << err << sql;
+            reportVia(m_owner, err);
             return false;
         }
     }
@@ -265,12 +289,19 @@ bool EntityStore::open(const QString &filePath) {
     m_db = QSqlDatabase::addDatabase("QSQLITE", m_connectionName);
     m_db.setDatabaseName(filePath);
     if (!m_db.open()) {
-        qWarning() << "EntityStore::open failed:" << m_db.lastError().text();
+        QString err = QString("EntityStore: cannot open %1: %2")
+                          .arg(filePath, m_db.lastError().text());
+        qWarning() << err;
+        reportError(err);
         return false;
     }
     QSqlQuery pragmas(m_db);
     pragmas.exec("PRAGMA foreign_keys = ON");
     return true;
+}
+
+void EntityStore::reportError(const QString &msg) const {
+    if (m_onError) m_onError(msg);
 }
 
 bool EntityStore::isOpen() const { return m_db.isOpen(); }
@@ -283,7 +314,7 @@ void EntityStore::close() {
 }
 
 void EntityStore::registerSheet(const SheetSchema &s) {
-    auto t = std::make_shared<EntityTable>(m_db, s);
+    auto t = std::make_shared<EntityTable>(m_db, s, this);
     if (m_db.isOpen()) t->ensureSchema();
     m_tables[norm(s.sheetId)] = t;
 }
