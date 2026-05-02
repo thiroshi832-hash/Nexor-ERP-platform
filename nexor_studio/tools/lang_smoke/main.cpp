@@ -9,6 +9,8 @@
 #include <QCoreApplication>
 #include <QTextStream>
 #include <QStringList>
+#include <QDir>
+#include <QFile>
 #include "language/NexorRuntime.h"
 #include "language/EntityStore.h"
 
@@ -179,6 +181,55 @@ int main(int argc, char *argv[]) {
             out << QString("        got  : saveOk=%1, sink=%2\n")
                     .arg(saveOk ? "true" : "false", captured);
         }
+    }
+
+    // ── Entity member-assignment round-trip ────────────────────────────
+    // Reproduces SeedDemoData's path: open store, register Customer
+    // schema, then via interpreter do  Dim c = Customer.New() :
+    // c.Name = "Acme" : c.Save() — and assert the row landed with Name
+    // set.  Surfaces any breakage in MemberAssign → Entity::set routing.
+    {
+        ++total;
+        nx::NexorRuntime rt;
+        QString captured, errMsg;
+        rt.setOutput([&captured](const QString &line){
+            if (!captured.isEmpty()) captured += '\n';
+            captured += line;
+        });
+        rt.setError([&errMsg](const QString &er){
+            if (!errMsg.isEmpty()) errMsg += '\n';
+            errMsg += er;
+        });
+
+        QString tmpDb = QDir::tempPath() + "/nx_lang_smoke_entity.ndb";
+        QFile::remove(tmpDb);
+        rt.interpreter()->entityStore()->open(tmpDb);
+
+        nx::SheetSchema cust;
+        cust.sheetId = "Customer";
+        nx::SheetSchemaField idF;   idF.name = "Id";   idF.type = "Long";   idF.isKey = true; idF.required = true;
+        nx::SheetSchemaField nameF; nameF.name = "Name"; nameF.type = "String"; nameF.required = true;
+        cust.fields << idF << nameF;
+        rt.interpreter()->registerSheet(cust);
+
+        const char *src =
+            "Sub Test()\n"
+            "  Dim c = Customer.New()\n"
+            "  c.Name = \"Acme\"\n"
+            "  c.Save()\n"
+            "  Print Customer.Count() & \"|\" & Customer.Find(1).Name\n"
+            "End Sub";
+        bool compiled = rt.compile(src, "entity-roundtrip");
+        if (compiled) rt.call("Test");
+
+        bool ok = compiled && errMsg.isEmpty() && captured == "1|Acme";
+        if (!ok) {
+            ++failed;
+            out << "  FAIL  entity-member-assignment-roundtrip\n";
+            out << QString("        want : 1|Acme, no errors\n");
+            out << QString("        got  : print=%1 err=%2\n").arg(captured, errMsg);
+        }
+        QFile::remove(tmpDb);
     }
 
     out << QString("\n%1 / %2 cases passed (%3 failed)\n")

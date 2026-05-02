@@ -252,19 +252,26 @@ StmtPtr Parser::parseAssignOrExpr() {
         }
     }
     int line = peek().line;
-    // Parse a primary-then-postfix expression; if it ends with a member
-    // access AND is followed by '=', it's a member-assignment statement.
-    ExprPtr e = parseExpr();
-    if (check(TokKind::Eq) && e && e->kind == Expr::Member) {
+    // Member-assignment lookahead: parseExpr would treat '=' as the equality
+    // operator (parseCmp consumes it), so  obj.prop = value  would silently
+    // parse as a discarded comparison.  Try the LHS at parseConcat — the
+    // level immediately below comparisons — and if it lands on a MemberExpr
+    // followed by '=' we have a member assignment.  Otherwise rewind and
+    // parse as an ordinary expression statement.
+    int savedPos = m_pos;
+    ExprPtr lhs = parseConcat();
+    if (lhs && lhs->kind == Expr::Member && check(TokKind::Eq)) {
         advance();                      // consume =
         ExprPtr v = parseExpr();
         consumeNewline();
-        auto *m = static_cast<MemberExpr*>(e.get());
+        auto *m = static_cast<MemberExpr*>(lhs.get());
         return std::make_shared<MemberAssignStatement>(line,
                                                       m->object,
                                                       m->property,
                                                       v);
     }
+    m_pos = savedPos;
+    ExprPtr e = parseExpr();
     consumeNewline();
     return std::make_shared<ExprStatement>(line, e);
 }
