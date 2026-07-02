@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Form version="1">
-  <Title>Customers</Title>
-  <Geometry width="520" height="380"/>
-
-  <Widget type="QLabel" name="lblHeader" x="20" y="10" width="480" height="24">
-    <Property name="text">Active customers, ordered by name:</Property>
-  </Widget>
-  <Widget type="QPlainTextEdit" name="txtList" x="20" y="40" width="480" height="280">
-    <Property name="readOnly">true</Property>
-  </Widget>
-  <Widget type="QPushButton" name="btnRefresh" x="20" y="335" width="100" height="30">
-    <Property name="text">Refresh</Property>
-  </Widget>
-
-  <Code><![CDATA[Sub Form_Load()
+<Form version="1" id="">
+    <Geometry x="100" y="100" width="520" height="380"/>
+    <Title>Customers</Title>
+    <Widgets>
+        <Widget type="QLabel" name="lblHeader" x="20" y="10" width="480" height="24">
+            <Property name="text">Active customers, ordered by name:</Property>
+        </Widget>
+        <Widget type="QPlainTextEdit" name="txtList" x="20" y="40" width="480" height="280">
+            <Property name="text"></Property>
+        </Widget>
+        <Widget type="QPushButton" name="btnRefresh" x="20" y="335" width="100" height="30">
+            <Property name="text">Refresh</Property>
+        </Widget>
+    </Widgets>
+    <Code><![CDATA[Sub Form_Load()
     Refresh()
 End Sub
 
